@@ -1,15 +1,6 @@
 # file encoding bin with some exceptions 
-# tag zappbuild as text  can reset from bin to text on Z "chtag -bR folder/*" 
-
-
+# tag all but zappbuild a bin   chtag -bR folder/*
 ** binary
-# the -text sets that folder as non-bin and prevents git on windows from converting crlf to lf  
-# not sure why Im getting that for some files like my new rexx scripts?
-dbb-v2/dbb-zappbuild/** zos-working-tree-encoding=ibm-1047 git-encoding=utf-8 -text !diff
-
+dbb-v1/dbb-zappbuild/** zos-working-tree-encoding=ibm-1047 git-encoding=utf-8 text !diff
+dbb-v2/dbb-zappbuild/** zos-working-tree-encoding=ibm-1047 git-encoding=utf-8 text !diff
 .gitattributes zos-working-tree-encoding=iso8859-1 git-encoding=utf-8 text !diff
-
-# side note. To del all git hist from windows or Z
-#           del .git, init, add., git remote add origin git@github.com:nlopez1-ibm/waziDBB.git 
-#           commit, git push -u --force origin main
-#           if done on windows, del the repo in Z and re-clone 
