@@ -1,0 +1,270 @@
+wip /* rexx gitdrift (nlopez)
+
+script to detect prod and lowe branch diff like hotfix during an ongoing build/release sprint
+
+
+*/     
+parse prodBranchName 
+call init 
+
+Diff 
+    
+    cmd='git clone '  appRepo wkdir  '--branch ' branch
+    gc=bpxwunix(cmd ,,cmdo.,cmde.)  /* use a stem to capture stdout errors for */
+    ftE=time('R')
+    */ 
+
+    if exists('.git') = "" then call errOut_gitClone /* something went wrong */
+
+
+
+    /* get the zFs disk size */            
+    gc=bpxwunix('du .' ,,duo.,due.); duLast=duo.0
+    full_size_Bytes   = word(duo.duLast,1) * 512 
+    
+    /* convert git Log into a stem full.log  */
+    call Analyzing_Log 
+    say '  commits =' commits
+    say '  tags    =' tags
+    say '  merges  =' merges
+
+
+    /* standalone stats*/
+
+    /* top changed files */
+    say ***
+    say "Revision count by file:"
+    top="git log --name-only --pretty="format:" | sed '/^\s*$/'d | sort | uniq -c | sort -r | head"
+    gc=bpxwunix(top)
+    say 
+
+    exit 
+    
+    
+    /* Convert git log from getCommitCnt to array */
+    full.commit.0
+    address syscall readfile ('temp_commit_log') full.commit.    
+    do  fc = 1 full.commit.0
+                         
+        if left(strip(prop.prx),2)   = '/*'  then iterate
+        if strip(prop.prx)    = ''    then iterate
+         
+
+
+say '** Complete' 
+/* cleanup 
+  x=bpxwunix('cd');x=bpxwunix('rm -rf 'wkdir)
+  x=bpxwunix('mkdir 'wkdir);x=direct
+*/
+exit 0
+
+
+     
+         /* play with details  https://git-scm.com/docs/pretty-formats
+         get raw log then spin thru it to add more details like: 
+                                  
+                 - git log -1 77c6391    - dupm 1 comit at the hash 
+                 - git log -5 --oneline --follow -- poc-app/cobol/datbatch.cbl  trace chgs t oia file 
+
+                
+         musc                  
+         git log --pretty=format:"%h  %cn %cs %d "
+         git log  e480c9c -n 1   to shwo details of a com relate to a tag       
+         git show --pretty="" --name-only 491f67e  to show the file diff in a co
+         
+         */
+     
+return 
+
+
+init:     
+    x=bpxwunix('clear')
+    if prodBranchName  = ''  then do 
+        say 'gitdrift Error! Invalid or missing args'
+        say '  Example run   ./gitaudit <appRepo> <depth> <branch>'
+        say '     -<appRepo>   is an application appRepo.'
+        say '     -<depth>  how many tags to keep.'
+        say '     -<branch> is the branch to examine.'
+        say ''        
+        say ; say '***' 
+        exit 12
+    end
+     
+    metaType = '-t file'  /* can be db2- see DBB doc for details */ 
+    say '*** zOS gitaudit Util (v1.1): '
+    say '    Analyzing appRepo "'appRepo'"',
+    'to a historical commit depth of' depth ' in the ' branch 'branch '
+    say '    Using local git client and DBB cli and a a hardcoded MetaDataStore('metaType')'
+    say 
+     
+    parse var appRepo . '/' appRepoDir '.' .
+  
+    /* todo:  maybe place in /tmp? snf a folder per repo */
+    wkdir = '/u/ibmuser/gitaudit-Report'
+  
+    x=bpxwunix('cd');
+    /* skip for test */
+    say '*** TEST: resuing old clone for fast testing ' 
+    /* x=bpxwunix('rm -rf 'wkdir);x=bpxwunix('mkdir 'wkdir) */
+    x=directory(wkdir)
+
+return
+
+AddComma: Procedure   /* for numbers up to 16 digits */                         
+  arg bytes                                                   
+  str=strip(translate('0,123,456,789,abc,def', ,              
+      right(bytes,16,','),'0123456789abcdef'),'L',',')
+ return strip(str)
+ 
+
+
+
+
+errOut:
+    say 'General prolem initizalizing working dir.'
+exit 12
+
+errOut_gitClone:
+   say 'Error cloning Git appRepo. Check the appRepo name, depth and branch  '
+   say 'Running git cmd: ' cmd 
+   /* note git uses stderr for non errs so dump all */
+   do cx= 1 to cmdo.0; say cmdo.cx;end
+   do cx= 1 to cmde.0; say cmde.cx;end 
+exit 12 
+
+
+
+
+
+
+
+
+
+
+/*
+*
+* ARCH 
+*
+*/ 
+
+deadCode_hold:
+/* gc=bpxwunix('wc -l temp_commit_log' ,,wco.,wce.) */
+
+/* always add one blank line at end? BPXW0003I Improper text file */
+
+
+arch:
+
+audit_phase2_get_the_pruned_repoBranch_stats:    
+    /* Get stats from pruned point  */
+    x=bpxwunix('cd');x=bpxwunix('rm -rf 'wkdir);x=bpxwunix('mkdir 'wkdir);x=dire
+    pT=time('E')
+    cmd='git clone  '  appRepo wkdir  '--depth ' depth '--branch 'branch
+    gc=bpxwunix(cmd ,,cmdo.,cmde.)
+    ptE=time('R')    
+    gc=bpxwunix('du .' ,,duo.,due.); duLast=duo.0
+    prune_size_Bytes  = word(duo.duLast,1) * 512""
+    prune_commit_Count = getCommitCnt()
+     
+     
+     
+Report_phase:  /* show the numbers */
+    say 'Performance analysis of repo/branch "'appRepo'" / "'branch'":' 
+    say '  Current size of this repo is: ' trunc(full_size_Bytes/1024/1024,2) 'Mb'
+    say '              Clone elapse sec: ' trunc(ftE,4)
+    say '                 Total Commits: ' full_commit_Count  
+           
+    say 
+    say '            Size after Pruning: ' trunc(prune_size_Bytes/1024/1024) 'Mb'
+    say '              Clone elapse sec: ' trunc(ptE,4)
+    say '                 Total Commits: ' prune_commit_Count  
+       
+    say 
+    disk_saving_percent    = trunc(100-(prune_size_Bytes/full_size_Bytes*100),2)
+    disk_saving_size       = full_size_bytes-prune_size_Bytes
+    
+    
+    say 'Pruning Git history to a depth of ' depth  'saves ',
+         trunc(disk_saving_size/1024/1024,2) 'Mb  or ' disk_saving_percent'% disk space'
+   
+    if ptE<ftE then do /* for smaller repos the pruned clone time my not be fast */
+        elapse_saving_time_precent = trunc(100-(ptE/ftE*100),2)         
+        say 'Pruning could reduce cloning time by ' elapse_saving_time_precent '%' 
+    end
+     
+    /* add some AI */
+    say 
+    if  elapse_saving_time_precent > 35 | disk_saving_percent > 35 then
+        say '*** Based on theses savings its Recommended to run a prune.'    
+    else
+        say '*** Based on theses results, pruning will NOT provide significant savings' 
+
+/* README 
+fyi 
+ - vscode trucate line to 80 lost some stuff ?? made it 120 in open edit setting 
+ - stop clone for faster testing 
+ - see go script https://github.com/github/git-sizer/tree/master
+
+This analyzes applicaiton Repo's for:
+     1 AUDIT PURPOSES
+        - ALLOW ANYONE TO RUN AGAINTS ANY PROD BRANCH BY "DATE" OR "TAG" 
+        - GET FILE DIfF (CHGS), WHO DID THEM AND WHO APPROVED THE MERGE
+        - CROSS REF WITH DBB META DATA
+        - TRY TO CROSS REF WITH CD SERVER - UCD FOR NOW  
+        see https://yellowbook-cpe.com/questions-answered-by-the-elements-of-an-
+        
+        uc1:
+            - condition: was a merge to prod approved by who and when 
+            - effect: If not approved by an authorized user, the release was at 
+            - Cause: The git server authorization policy was not properly define
+            - Criteria: The Cause was verified by the repo Admin
+            - Recomemmendations:
+                - review all releases found with this 'conidtion' and mitigate a
+                - Update the 'cause'  to prevent this 'effect' 
+            
+            data gathered tp support th UC
+            - review all git merges to the production branch 
+            - report to admins the merge approvers user id for confirmation that
+            - ...
+        uc2:
+            - Condition: Did the changes released to prod originate from an auth
+            - Effect: Executables without clear traceiblity to approved source r
+            - Cause: The release process (CD) is not enforcing the integrity of 
+            - Criteria: The Release pipeline ???
+            - Recommendations:
+                - the condition ..
+                - The cause and effect ...
+
+            supporting data:
+                - release management  packaging process - approval ID
+                - build management package creation 
+                - Mapping across ci/cd   
+
+            
+
+
+     2 PERFORMANCE TUNING TIP   
+        - CLONE A FULL PROD BRANCH TO GET TOTAL BYTEWS AND NETWORK DELAY TIMING
+        - REVIEW COMMIT 
+        - SIMUATE OPTIMUM PURGE POINT WITH RETENTION POLICY LIKE KEEPING 3 MAJOR
+        - AND ARCHIVE THE REST IN A SEPERATE REPO ???     
+  iT ASSUME TO RUN AGAINST pRODUCITON BRNAHCS LIKE MAIN.  IDEALLY TAGS ARE USED 
+  TAGS ALSO ENHANCED THE TUNING PHASE AS ITS EASIER TO DETERMINE A LOGICAL POINT
+  GIT HISTORIES. 
+  
+   ---
+
+WIP Required Args:
+    - appRepo:   (required) The application Repo url for cloning on Z.
+
+    - depth:  (required) How many tags to keep 
+    - branch: (required) the branch to examine
+
+    perf notes:
+        - elapsed time is wall time which include system_wait,cpu,disk and netwo
+      
+*/    
+
+
+/*  EOF  more than 100 line please  
+*/ 

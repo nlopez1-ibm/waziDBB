@@ -1,0 +1,27 @@
+################################################################################
+# The following properties override the default java.security file to enable
+# FIPS encryption. Use java.security.properties JVM option to point to this
+# file when running your DBB build scripts. You must also set the JVM option
+# -Dcom.ibm.jsse2.usefipsprovider=true.
+#
+# These settings assume an IBM JVM is installed and being used to run the
+# build process.
+#
+# NOTE: This file can only override the default java.security if the default
+# file contains security.overridePropertiesFile=true and allows overriding.
+# If not set, you must consult your system admin to configure FIPS encryption.
+################################################################################
+
+ssl.SocketFactory.provider=com.ibm.jsse2.SSLSocketFactoryImpl 
+ssl.ServerSocketFactory.provider=com.ibm.jsse2.SSLServerSocketFactoryImpl
+
+security.provider.1=com.ibm.crypto.fips.provider.IBMJCEFIPS
+security.provider.2=com.ibm.jsse2.IBMJSSEProvider2
+security.provider.3=com.ibm.crypto.provider.IBMJCE
+security.provider.4=com.ibm.security.jgss.IBMJGSSProvider
+security.provider.5=com.ibm.security.cert.IBMCertPath
+security.provider.6=com.ibm.security.sasl.IBMSASL
+security.provider.7=com.ibm.xml.crypto.IBMXMLCryptoProvider
+security.provider.8=com.ibm.xml.enc.IBMXMLEncProvider
+security.provider.9=org.apache.harmony.security.provider.PolicyProvider
+security.provider.10=com.ibm.security.jgss.mech.spnego.IBMSPNEGO

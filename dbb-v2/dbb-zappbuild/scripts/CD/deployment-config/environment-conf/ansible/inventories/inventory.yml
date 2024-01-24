@@ -1,0 +1,22 @@
+################################################################################
+# © Copyright IBM Corporation 2020, 2021   
+# njl - updated for Azure from MD AWS
+################################################################################
+
+################################################################################
+# Description of the properties used in this configuration:
+# - Property `ansible_host` is the z/OS managed node (target),
+#    e.g, ansible_host: "zvm1.vmec.svl.ibm.com"
+# - Property `ansible_user` is the z/OS managed user to connect and run as over SSH,
+#    e.g, ansible_user: "zosadm"
+################################################################################
+
+all:
+  hosts:
+    sandbox:
+      ansible_host: "10.1.2.4"
+      ansible_port: "31859"
+      ansible_user: "ibmuser"
+      ansible_password: "sys1"
+      host_key_checking: False
+

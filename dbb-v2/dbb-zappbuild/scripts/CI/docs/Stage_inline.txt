@@ -1,0 +1,25 @@
+# stage the DBB package on the Agent using sftp (SCP fails)
+
+echo "... >>>   Get the package and Logs "
+#    CD to the agent's working dir of this run
+cd $(Build.ArtifactStagingDirectory)
+mkdir dbb-logs
+
+#     create an sftp batchfile to stage objects 
+echo get  $(myWorkDir)/$(myWorkSpace)/package.tar                     > ftpBat
+
+echo get  $(myWorkDir)/$(myWorkSpace)/*.log            ./dbb-logs  >> ftpBat
+echo get  $(myWorkDir)/$(myWorkSpace)/*.json           ./dbb-logs  >> ftpBat
+echo get  $(myWorkDir)/$(myWorkSpace)/Build*.html  ./dbb-logs  >> ftpBat
+
+echo exit                                                                                            >> ftpBat 
+
+#     run sftp with the batchfile  
+sftp -P 31859  -b ftpBat ibmuser@10.1.2.4 
+
+
+
+# show dir contents 
+echo "... >>>"
+echo " Show agent  working dir ArtifactStagingDirectory"
+ls -R $(Build.ArtifactStagingDirectory)/*

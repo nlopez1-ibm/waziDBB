@@ -1,0 +1,59 @@
+# Variable Group 'Azure-Demo-Var-Grp' was defined in the Variables tab
+variables:
+- name: BuildParameters.publishPackageMetadata
+  value: true
+- name: BuildParameters.publishDirectory
+  value: $(Build.ArtifactStagingDirectory)
+trigger:
+  branches:
+    include:
+    - refs/heads/Develop
+jobs:
+- job: Job_1
+  displayName: Azure Cloud Agent VM to Wazi Sandbox over SSH
+  pool:
+    name: ado-wazi-agent
+  steps:
+  - checkout: self
+    fetchDepth: 1
+  - task: SSH@0
+    displayName: "Clone on Wazi Sandbox's Unix System Service - using myWazi "
+    inputs:
+      sshEndpoint: ef567feb-2f89-434b-94c3-0e6aeb581bc2
+      commands: "# CBSA Repo\n$(myScriptsHome)/scripts/CI/Clone2.sh   $(myWorkDir) $(myWorkSpace) $(myRepo)   $(Build.SourceBranch) \n\n\n\n\n# test repo \n#$(myScriptsHome)/scripts/CI/Clone2.sh  $(myWorkDir) poc-workspace git@20.41.6.13:v3/IBM-Azure-Demo-Sandbox/Azure-zmodStack-demo/poc-workspace main \n"
+  - task: SSH@0
+    displayName: Build with DBB (daemon stc=dbbs)
+    inputs:
+      sshEndpoint: ef567feb-2f89-434b-94c3-0e6aeb581bc2
+      commands: "echo \">>>>>>>>>   Run DBB Build\"\n$(myScriptsHome)/scripts/CI/Build.sh   $(myWorkDir) $(myWorkSpace) $(myApp)  --impactBuild \n\necho \">>>>>>>>>   Show Log output\"\necho \" ls of dbb output dir: \"\nls -r $(myWorkDir)/$(myWorkSpace)/*.log \nls -r $(myWorkDir)/$(myWorkSpace)/*.json\nls -r $(myWorkDir)/$(myWorkSpace)/Build*.html\n\n\n\n\n\n## test repo \n# $(myScriptsHome)/scripts/CI/Build.sh   $(myWorkDir) poc-worspace poc-app  --fullBuild -scanOnly  \n#$(myScriptsHome)/scripts/CI/Build.sh   $(myWorkDir) poc-workspace poc-app   poc-app/cobol/datbatch.cbl \n\n#$(myScriptsHome)/scripts/CI/Build.sh   $(myWorkDir) $(myWorkSpace) $(myApp)  --fullBuild -scanOnly  \n\n## NOTE chgs to azure repo dbb-zappbuild must be pulled to be in effect (see in sandbox)"
+  - task: SSH@0
+    displayName: Package Runtime Artifacts
+    inputs:
+      sshEndpoint: ef567feb-2f89-434b-94c3-0e6aeb581bc2
+      commands: "# package the DBB artifacts \n$(myScriptsHome)/scripts/CI/Package_Create.sh   $(myWorkDir)/$(myWorkSpace) \n\n"
+  - task: Bash@3
+    displayName: 'Stage Package and Logs '
+    continueOnError: True
+    inputs:
+      targetType: inline
+      script: "# stage the DBB package on the Agent using sftp (SCP fails)\n\necho \"... >>>   Get the package and Logs \"\n#    CD to the agent's working dir of this run\ncd $(Build.ArtifactStagingDirectory)\nmkdir dbb-logs\nmkdir test-results\nmkdir code-coverage \n\n#     create an sftp batchfile to stage objects \necho get  $(myWorkDir)/$(myWorkSpace)/package.tar                     > ftpBat\n\necho get  $(myWorkDir)/$(myWorkSpace)/*.log            ./dbb-logs  >> ftpBat\necho get  $(myWorkDir)/$(myWorkSpace)/*.json           ./dbb-logs  >> ftpBat\necho get  $(myWorkDir)/$(myWorkSpace)/Build*.html  ./dbb-logs  >> ftpBat\n\necho exit                                                                                            >> ftpBat \n\n#     run sftp with the batchfile  \nsftp -P 31859  -b ftpBat ibmuser@10.1.2.4 \n\n\n## convert zUnit report to jUnit \necho \"... >>>\"\necho \"Run xalan to convert zunit to junit xml\"\nxalan -out ./test-results/zUnit.xml  -in ./dbb-logs/*.zunit.report.log   -xsl /home/azureuser/dbb-zappbuild/scripts/utilities/zUnit/AZUZ2J30.xml\n\n\n# copy example code coverage report \ncp /home/azureuser/dbb-zappbuild/scripts/utilities/zUnit/cc_pgma.xml  ./code-coverage/cc_pgma.xml \n\n# show dir contents \necho \"... >>>\"\necho \" Show agent  working dir ArtifactStagingDirectory\"\nls -R $(Build.ArtifactStagingDirectory)/*\n"
+  - task: UniversalPackages@0
+    displayName: Publish Runtime Package in Azure Artifacts
+    inputs:
+      command: publish
+      feedListDownload: 27f5e13f-c09f-49b5-b893-b3570eb020a0/c8ce84a3-70f1-4110-a502-a675a526a174
+      publishDirectory: $(BuildParameters.publishDirectory)
+      feedListPublish: 27f5e13f-c09f-49b5-b893-b3570eb020a0/c8ce84a3-70f1-4110-a502-a675a526a174
+      publishPackageMetadata: $(BuildParameters.publishPackageMetadata)
+      packageListPublish: cbsa_package
+      versionPublishSelector: major
+      versionPublish: build_ver_$(Build.buildid)
+      packagePublishDescription: 'Package for the CBSA zOS Application '
+      verbosity: Trace
+  - task: PublishBuildArtifacts@1
+    displayName: Save logs in Pipeline Run
+    condition: succeededOrFailed()
+    continueOnError: True
+    inputs:
+      ArtifactName: 'Build Logs '
+...

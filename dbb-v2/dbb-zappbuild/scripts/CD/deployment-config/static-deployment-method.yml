@@ -1,0 +1,34 @@
+---
+apiVersion: deploy.ibm.com/v1
+kind: DeploymentMethod
+metadata:
+  name: "Static Deployment"
+  version: "1.0.0"
+  annotations:
+    deployVersion: "1.0.0"
+
+activities:
+  - name: PACKAGE
+    actions:
+      - name: PACKAGE
+        steps:
+        - name: PACKAGE
+    tags:
+    - always    
+
+
+  - name: DEPLOY_MODULES
+    actions:
+      - name: DEPLOY 
+        states: 
+          - UNDEFINED
+        steps: 
+        - name: MEMBER_COPY        
+
+    types:
+      - name: 'LOAD'
+       
+    is_artifact: True   
+    tags:
+    - deploy_modules 
+

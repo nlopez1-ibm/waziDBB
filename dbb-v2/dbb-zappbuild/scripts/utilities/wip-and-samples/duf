@@ -1,0 +1,44 @@
+just an idea but du -s does what I needed ...
+keey this for ref
+
+/* rexx duf util (nlopez beta 1)
+   uses du -s and format it from 512k to mb 
+   
+   args
+     - (opt)  dir path. default is pwd
+     - (opt)  size format (blank,gb). default is blank for size in mb 
+
+     
+     this just formats it for eeaier reading 
+     du notes - size is 512
+     empy dir = 0 
+     dir size seems to be part of calc?
+     a one file inow return 16 plus 16 for the file i tested ???
+     note: 
+           all script my by tagged IBM-1047  chtag -tc IBM-1047 *
+           .profile now has this folder in its path
+*/
+parse arg dir format
+/* if dir='' then dir = '.' */
+say '>' dir '<'
+cmd = 'du -as ' dir
+x=bpxwunix(cmd ,,cmdo.,cmde.)
+if cmdo.0 < 1 then do; 'du -as ' dir; exit 8; end
+sz = word(cmdo.1,1)
+dir = word(cmdo.1,2)
+say sz   dir 
+exit 0
+say dir 'size' addComma((cmdo.1 * 512)/1024*1024)
+ 
+exit 0
+
+
+/* EOF */ 
+AddComma: Procedure   /* for numbers up to 16 digits */                         
+  arg bytes                                                   
+  str=strip(translate('0,123,456,789,abc,def', ,              
+      right(bytes,16,','),'0123456789abcdef'),'L',',')
+ return strip(str)
+ 
+
+

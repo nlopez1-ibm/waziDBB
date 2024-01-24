@@ -1,0 +1,65 @@
+/* rexx dbbprune util (nlopez)
+Prunes DBB App Build-groups using the DBB CLI on zOS USS
+*/ 
+parse arg build_group depth
+call init 
+
+prune_app_BuildResults:  /* build group is the source collection name */
+    cli = 'dbb build-group view ' build_group metaType
+
+    gc=bpxwunix(cli ,,cmdo.,cmde.)    
+    if cmde.0 <> 0 then call errOut
+    
+    offset=11
+    abs_count= cmdo.0-offset+1
+    bg_count = cmdo.0-offset 
+
+    if depth = abs_count |  depth > abs_count then do 
+        say '  Warning: Nothing to do!'
+        say '  "'build_group'" current build results count of ' abs_count, 
+        'does not exceed the depth of ' depth        
+        exit 0
+    end  
+
+    do prune = depth+offset to cmdo.0
+        label = word(cmdo.prune,1)         
+        cli = 'dbb build-result delete 'label' --build-group ',
+               build_group ' -t file'         
+        gc=bpxwunix(cli)
+    end 
+
+say '** Complete' 
+exit 0
+
+
+init:     /* and help */
+    if build_group = '' | depth = '' | datatype(depth) <> 'NUM'  then do 
+        say 'dbbrpt Error! Invalid or missing args'
+        say '  Example run   ./dbbutil <collection> <depth> '
+        say '     -<collection> is a DBB collection name for an application.'
+        say '     -<depth> how many build reports to keep.'
+        say ''
+        say '  FYI: Run dbbrpt util to query all build histories'    
+        say ; say '***' 
+        exit 12
+    end 
+    
+    metaType = '-t file'  /* can be db2- see DBB doc for details */
+    say '*** DBB Prune Util: Attempting to prune the Build Group "'build_group'"',
+    'results to a depth of' depth
+    say '    Using DBB cli with a hardcoded MetaDataStore('metaType')'
+    say
+  
+
+return
+
+errOut:
+    say 'DBB CLI encountered a problem.', 
+    say 'Check that the DBB environment, and hardcoded metadataStore',
+    'are properly defined. Also check the Build Group name arg.'
+
+    gc=bpxwunix(dbbcli)       
+exit 12
+
+/* always add one blank line at end? BPXW0003I Improper text file */
+

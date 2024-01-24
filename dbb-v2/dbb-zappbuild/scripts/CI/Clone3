@@ -1,0 +1,121 @@
+/* rexx clone3 is a newversion of the clone shell script with Clone_app
+    advanced features (nlopez q4'23)
+
+    TODO: 
+        - test with multi repo apps     
+        - test after a scan only run
+*/
+parse arg workDir workSpace repoUrl branch appName shallow 
+call init 
+
+say '**************************************************************'
+say '**  Clone3 Started. Arguments passed:'
+say '**            WorkDir/WorkSpace:' workDir"/"workSpace 
+say '**              Repo Url/Branch:' repoUrl":"branch 
+say '**                 DBB App Name:' appName
+say '**                Shallow Clone:' shallow
+say 
+
+if shallow='shallow' then do    
+    if shallowDate = '' then 
+        say '** No prior DBB build metadata found. Running full clone.'
+    else    
+        say '** Optimizing shallow clone using DBB`s prior build metadata date'  
+end 
+
+/* Clone the repo.  */
+clone_cmd = 'git clone -b 'branch shallowDate repoURL
+say; say '** Clone cmd:' clone_cmd 
+clone_cmd  '2>&1'
+
+
+/* show the log */
+address syscall 'chdir ' repoName
+if shallowDate = '' then do 
+    say 'Git history log (last 5):'
+    'git log --oneline  -n 5' 
+end 
+else do 
+    lastBuildDate=substr(shallowDate,11)
+    say 'Git history 'lastBuildDate' DBB last build:'    
+    'git log --oneline  --since='lastBuildDate   
+    
+end 
+
+
+say '** DONE'
+exit   0  
+
+/* Subs  */
+/*********/
+init:  /* validate args and prep the clone   - not prefect validation fix */ 
+    if workDir=''|workSpace=''|repoURL=''|branch=''|appName=''  then do  
+        say 'ERROR: Missing required args.'
+        say 'Usage:  ...'
+        exit 12 
+    end 
+
+    /* assume a simple repo name with one slash*/
+    parse var repoUrl . '/' repoName '.git' .
+
+    /* remove refs prefix */
+    headsPos=lastpos('/',branch) 
+    if headsPos > 0 then branch = substr(branch,headsPos+1)
+    
+    /* construct a shallowdate from DBB metadate - SEE TECH NOTE BELOW */
+    shallowDate=''
+    if shallow='shallow' then shallowDate=getDBB_Date()
+                
+
+    /* init working dir */
+    'mkdir -p 'workDir; address syscall 'chdir ' workDir    
+    
+    /* needed when tags are passed */
+    'git config --global  advice.detachedHead false > /dev/null'
+return 
+
+
+getDBB_Date:
+    shallowDate=''            /* init empty when scanOnly detected */
+    dbbGroup=appName'-'branch 
+    find_dbbGroup='dbb build-result find  --build-group 'dbbGroup,
+                  ' --state 2 --status 0  -t f'   
+    x=bpxwunix(find_dbbGroup,,fg_cmdo.,fg_cmde.)     
+    if fg_cmdo.0 < 3 then call Error_Missing_DBB_Metadata          
+                            
+    if fg_cmdo.0 > 9 then do  /* not a scanOnly      */
+        sec_br=fg_cmdo.10
+        label = word(sec_br,1)    
+        parse var label . +6 sYYYY +4 sMM + 2 sDD '.' . 
+        shallowDate= " --shallow-since='"sYYYY"-"sMM"-"sDD "00:00:00'"           
+    end
+return   shallowDate
+
+Error_Missing_DBB_Metadata: 
+    say "**ERROR: Cant access DBB build metadata.  "
+    say "  Check your dbb metadata config and ensure a one-time dbb build",
+        "using the arguments '--fullBuild --scanOnly' is run for this ",
+        "application and branch."
+    say "**Terminating Step:"
+    exit 12
+return 
+    
+
+/* Tech on using DBB's build report label as a date for shallow cloning. 
+    Logic: 
+    - Find all clean build results ordered by lastUpdated Descending. 
+    - Convert the label into a git shallowDate format. 
+    - But, becuase build date is not the same as last clean commit date,
+    use the last build(+1).  This ensures any commits from that point
+    are included in the shallow clone for the next impact build. 
+
+    Parsing notes: 
+    - Hardcoding lines for parsing dbb v2 cli api stdout.
+    - The first 8 lines are headings.
+    - When there is only a Scanonly report, it will be on 9 and the clone 
+    will skip shallow cloning. 
+    - After an impact build, line 9 is always the latest (sorted). And 
+        line 10 is the latest(+1) used to generate the shallowdate
+*/      
+
+/* eof */

@@ -1,0 +1,17 @@
+#*******************************************************************************
+# Licensed Materials - Property of IBM
+# (c) Copyright IBM Corp. 2023. All Rights Reserved.
+#
+# Note to U.S. Government Users Restricted Rights:
+# Use, duplication or disclosure restricted by GSA ADP Schedule
+# Contract with IBM Corp.
+#*******************************************************************************
+
+# MAIN ANSIBLE PLAYBOOK FOR STATIC DEPLOYS - NJL
+---
+- hosts: "{{ plum_hosts if plum_hosts is defined else 'all' }}"
+  gather_facts: "{{ plum_gather_facts if plum_gather_facts is defined else 'no' }}"
+  serial: "{{ plum_serial if plum_serial is defined else 5 }}"
+  tasks:
+      - import_role:
+          name: ibm.ibm_zos_plum_deploy.zos_deploy

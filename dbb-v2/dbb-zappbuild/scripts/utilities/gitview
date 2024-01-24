@@ -1,0 +1,216 @@
+/* rexx gitview v1.1 (nlopez) - git insight rpt*/     
+/* TESTING ... */
+address syscall 'getcwd wkDir' /* pwd must repo root or 1 above*/
+
+/* Find the .git dir in pwd. Note only supports one repo per app */
+gitDir=rCMD('find 'wkDir ' -type d -name .git')
+parse var gitDir repoDir '/.'  .
+address syscall 'chdir ' repoDir /* move into repo dir */
+
+ 
+/* Calc sizes using du cmd to get physical zFS space */ 
+/* Total repo size from the root includes uncompressed working tree and indexes...*/
+repo_size=word(rCMD('du -s'),1) * 512
+ 
+/* The size of .git internals */
+git_size=word(rCMD('du -s 'gitDir),1) * 512
+
+ 
+
+/* Size of HEAD objects compressed at ormally 50% */
+lc="git ls-tree -r --long HEAD | awk '{sum+=$4} END {print sum}'"
+workingTree_blob_size = rCMD(lc)
+
+/* Size of working tree (src) */
+workingTree_size = repo_size - git_size 
+workingTree_compression = trunc(100-(workingTree_blob_size/workingTree_size*100),2)  
+
+/* Percent of history over current working tree size */
+history_overhead = trunc(100-(workingTree_blob_size/repo_size*100),2)  
+
+/* commit history count */
+commit_count=rCMD("git rev-list HEAD --count")
+
+/* working tree file count */
+fileCount=rCMD("git ls-files | wc -l")
+
+/* oldest and latest commit date */
+lc="git log --pretty='%cr, CommitID: %h by %cn' --reverse|head -1"
+oldest_commit=rCMD(lc) 
+lc="git log --pretty='%cr, CommitID: %h by %cn' |head -1"
+latest_commit=rCMD(lc) 
+
+
+/* current branch name */
+HEAD=rCMD("git rev-parse --abbrev-ref HEAD")
+
+
+/* Estimated network transfer. Note: packs are transmitted pre-compressed and stays compressed locally */        
+avg_net_speed          = 10*1024*1024                  /* an example of a good network speed 10/mb Sec */
+est_transfer_duration  = trunc(git_size / avg_net_speed,3) 
+  
+
+
+
+/* Insight report */
+say ' Git Repo Report for' repoDir 'at Branch' HEAD
+say ' 'copies('*',80)
+say
+say '                   All Git Objects (bytes):' right(addComma(git_size),12)  '('history_overhead'% is Git history)'
+say '   Source Code - uncompressed Working Tree:' right(addComma(workingTree_size),12)
+say '                                             ------------'
+say '                           Total Repo Size:' right(addComma(repo_size),12)
+say 
+say '           Git working tree objects (HEAD):' right(addComma(workingTree_blob_size),12) '('workingTree_compression'% Compression ratio)'
+
+say
+say '              Est. clone duration:' est_transfer_duration 'At 'avg_net_speed/1024/1024'mb/s'  
+say 
+say '  Of the' commit_count 'commits, the'
+say '                  oldest is' oldest_commit
+say '                  latest is' latest_commit   
+say
+
+
+say '**';say 
+/* Make it really informative (-P suppress less pager issue  */
+topRevised="git -P log --name-only --pretty='format:' | sed '/^\s*$/'d | sort | uniq -c | sort -r | head -n 15 "
+gc=bpxwunix(topRevised,,cmdo.,cmde.)
+say '** Of the' strip(fileCount) 'source files, the top most revised:'
+
+say '  Commit Cnt_ FileName_______________________________________________ Last Commit_________________________'
+do rx = 1 to cmdo.0
+        l= cmdo.rx
+        parse var l size file
+        if size > 1 then do
+                lastDt=rCMD("git -P log -1  --pretty='%cr by %cn' -- '"file"'" )
+                say '  ' right(size,10) left(file,55) lastDT
+        end 
+end
+say        
+        
+
+
+
+/* Recommendations */
+/*sla's */
+
+too_many_files      = 10000         /* too many files - hard for devs to nav*/
+history_too_large   = 75            /* percent */
+target_repo_size    = 250000000     /* 125 mb trans avg 5sec @25m/s */
+target_transfer_duration = 15       /* sla- max secs to wait for a clone */
+
+
+
+say 
+
+/* flag issues */
+/***************/
+issue=0 
+if fileCount > too_many_files then do
+        issue=1
+        say "**Warning: This repo has a large number of files ("strip(fileCount)")."
+end 
+
+if history_overhead > history_too_large then do
+        issue=1  
+        say "**Warning: The history in this repo is ("history_overhead"%) larger than ",
+        "the working tree.  Deep histories slow performance and consume other resources.  Run a prune",
+        "job to archive old history and shirk the size of this repo's size (prune tool TBD)."
+end 
+
+
+if repo_size > target_repo_size then do
+        issue=1 
+        say "**Warning: The size of this repo ("repo_size") is high."
+end
+    
+    
+if avg_net_speed/1024/1024 > target_transfer_duration then do
+        issue=1 
+        say "**Warning: The estimated clone duration time is higher than the recommended threshold of ",
+        target_transfer_duration"/secs. This may be due to large repo size and/or the large history."
+end 
+
+if issue=0 then 
+        say "**Info: The overall size and history fall within acceptable ranges.  Your repo is in good shape!"     
+
+
+say "**"; say 
+say 'Notes: Git stores source code as compressed objects. During a clone, they are transferred ',
+'and used to create a current version of an application`s source files.'
+say 'The current version is also called the HEAD and the working tree in git.'
+say 
+say 'Git also stores revision history as objects.'  
+say 
+say 'The Git Object history percent represents the history size minus the HEAD.' 
+  
+say 'TIP: Keeping repo size small and history short will improve performance.'   
+say "***" 
+
+exit 0
+
+
+/* subs */
+/***************/
+AddComma: Procedure   /* for numbers up to 16 digits */                         
+    arg bytes                                                   
+    str=strip(translate('0,123,456,789,abc,def', ,              
+    right(bytes,16,','),'0123456789abcdef'),'L',',')
+return strip(str)
+ 
+rCMD: Procedure /* run a generic oneliner cmd*/
+    parse arg cmd
+    gc=bpxwunix(cmd,,cmdo.,cmde.)
+    if cmde.0 > 0 | cmdo.0 = 0 then do    
+        emsg = "Error running cmd: " cmd  
+        if word(cmd,1) = 'find' then emsg = "Error: Git directory not in current path."
+        say emsg 
+        cmd 
+        exit 12
+    end 
+return cmdo.1
+
+
+
+/* EOF */
+
+
+/* 
+wkDir = "/u/ibmuser/CI-PIPELINES-WorkDir/AzDBB_2596"
+wkDir='/u/ibmuser/tmp'
+x=directory(wkdir)
+'ls -l'
+*/
+
+
+
+/*
+
+wrong clone compress is not compressing its repacking...
+
+rewrite ... 
+
+Purpose: This scrip provides new git users insight into their repo. It  
+   gathers various stats mostly to help manage size and performance.  The key 
+   focus is git history. During a clone git will compress its object on the remote side, then 
+   transmit them as pack file(s). It then uncompresses, rebuilds internal indexes and the 
+   working tree.
+      
+   The tranmission phase is network bound with heavly write I/O.  The rebuild phase 
+   is CPU and I/O bound. Working tree size  
+   
+   During the transmissing 
+   The larger a repo the Large repo's and those with large histories obviouly take lon
+   
+   indexes and the working tree from the .git folder. Comparing the space 
+   in .git to the working tree is one way to get history disk size. 
+   Which contributes to network times and cpu + i/o during delta rebuild phase 
+   duing a clone.
+*/
+
+
+
+say; say '**'
+say ' The largest top source files are:'
+call bpxwunix("git ls-tree -r --long HEAD | sort -k 4 -n -r | awk '{print $4,$5}' | head -n 15")

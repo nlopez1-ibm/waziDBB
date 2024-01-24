@@ -1,0 +1,33 @@
+---
+################################################################################
+# Copyright (c) IBM Corporation 2021
+# njl - from MD AWS-DEMO for Azure-Demo
+################################################################################
+
+# ADCD z/OS version
+# issue command "D SYMBOLS" to find &SYSVER
+ADCD_SYS_VER: "Z25C"
+  
+CICS_HLQ: "DFH610.CICS"
+CICS_PROC_LIB: "FEU.{{ ADCD_SYS_VER }}.PROCLIB"
+CICS_SYSIN_LIB: "DFH610.SYSIN"
+CICS_LOADLIB: "{{ CICS_HLQ }}.SDFHLOAD"
+CICS_CSD: "{{ CICS_HLQ }}.DFHCSD"
+CICS_GRPLIST: "GRPLIST=(XYZLIST,CBSA)"
+CICS_START_CMD: "S {{ CICS_STC }}"
+
+DB2SSID: "?DBCG"
+DB2_HLQ: "DSND10"
+DB2_LOADLIB1: "{{ DB2_HLQ }}.SDSNLOAD"
+DB2_LOADLIB2: "{{ DB2_HLQ }}.SDSNLOD2"
+DB2_EXITLIB: "{{ DB2_HLQ }}.{{ DB2SSID }}.SDSNEXIT"
+DB2RUN: "{{ DB2_HLQ }}.{{ DB2SSID }}"
+
+COBOL_HLQ: "IGY630"
+####################################### END ###################################
+
+####################### Variables common to all hosts #########################
+CICS_STC: "CICSTS61"
+SQLID: "IBMUSER"
+DB2PROG: "DSNTEP2"
+DB2PLAN: "DSNTEP12"

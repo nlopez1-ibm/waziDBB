@@ -1,0 +1,84 @@
+/* rexx gitdrift (nlopez)
+    script to detect prod and lowe branch diff like hotfix during an ongoing build/release sprint
+    Note: If Main is Merged with release branches, the merge commitID may appear as a Diif in this 
+          report.  Consider using git REBASE to merge release into produciton for a cleaner history. 
+          This report will exlucde merge commits.
+*/    
+parse arg workDir prodBranchName 
+call init 
+
+
+check_for_drift:    
+    cmd=('git rev-list --no-merges ..'prodBranchName) /* show only what in main not in head - if any */
+    say cmd 
+
+    gc=bpxwunix(cmd ,,maino.,maine.)
+    if maino.0 = 0 then do 
+        say '*** Clean! Your branch is up to date with production.'
+        exit 0
+    end 
+
+
+    say '**** WARNING  ****'
+    say '    "'prodBranchName'" is ahead by ' maino.0 'commit(s)'
+    say '    Review the production branch to determine if these changes are needed in your build.'     
+    say ' ' 
+    
+    
+    say '    Note: the  "---" or "-" symbols below refer to production file or source code changes'
+    say '          the  "+++" or "+" are from "'checkedOut_Branch'"'
+    say ' '
+
+    say 'The following production CommitID(s) are not in "'checkedOut_Branch'"' 
+    do mx = 1 to maino.0
+        cmd='git diff 'maino.mx
+        gc=bpxwunix(cmd ,,diffo.,diffe.)
+                    
+        'git log  -1 --pretty=format:"    Prod CommitID: %h,  CommitDate: %cs, CommitAuthor: %an %n',
+        '           Comment: %s "' maino.mx 
+        do dx = 1 to diffo.0            
+            say '        ' diffo.dx
+        end         
+        say ' '
+     end 
+    
+ 
+say ;say '*** Complete' 
+exit 0
+
+init:     
+    x=bpxwunix('clear')     
+    if workDir  = ''  then do 
+        say 'ERROR:  Missing arg - workDir' 
+        say '  The workDir of a cloned repo was not provided. '        
+        say '  Example run   ./gitdrift <workDir> <branch>'
+        say '     -<workDir> (Reqiured) the directory clone of the app repo.'
+        say '     -<branch>  (Optional) is the production branch name. Default is "origin/main".'
+        say ''        
+        say ; say '***'         
+    end
+  
+    x=directory(workdir)
+    if exists('.git') = "" then call errOut_gitClone /* something went wrong */
+
+    gc=bpxwunix('git status ' ,,cmdo.,cmde.)       
+    if cmdo.0 = 0 then call errOut_gitClone /* something went wrong */
+    checkedOut_Branch = word(cmdo.1,3)
+
+    if prodBranchName  = '' then prodBranchName = 'origin/main'
+
+    say '*** zOS gitdrift Util (v1.0): '
+    say '    Analyzing differences between "'prodBranchName'" and "'checkedOut_Branch'"' 
+    say '    excluding merge commits.   '
+    
+return
+
+errOut_gitClone:
+    say '*** ERROR: General problem accessing the local repo in workDir ' workDir
+exit 12
+ 
+
+
+
+/*  EOF  more than 100 line please  
+*/ 

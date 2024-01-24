@@ -1,0 +1,127 @@
+/* rexx dbbrpt util (nlopez beta 1)
+   Summarizes metadata for all collections in a MetaStore.
+   Add dbb hash of last BR
+  
+ref: https://www.ibm.com/docs/en/dbb/2.0?topic=interface-collection-commands 
+*/
+call init
+
+main:    
+    /* Get all collections and catch any metadata access error. */
+    dbbcli = 'dbb collection list ' metaType
+
+    gc=bpxwunix(dbbcli ,,collections.,ce.)       
+    if ce.0 > 0 then call errOut 
+    
+    say h1 h2 h3 h4
+
+    do cx = 5 to collections.0   
+        collection_name = collections.cx; tot_colls=tot_colls+1
+
+        /* Get a collections details  */    
+        dbbcli = 'dbb collection view ' collection_name metaType        
+        collection_fileCnt = 'NA'
+        gc=bpxwunix(dbbcli ,,collection_view.,cde.)       
+        if collection_view.0 > 13 then fileCnt = collection_view.14
+        collection_fileCnt = word(fileCnt,3)
+
+        /* Get a collections Build Group  */
+        build_count = ''
+        last_build_date = '' 
+        last_build_Status= ''
+        Last_build_info=''
+        git_url = ''
+        git_hash = '' 
+
+        if right(collection_name,7) <> 'outputs' then do 
+            tot_sLG=collection_fileCnt+tot_sLG
+            dbbcli = 'dbb build-group view ' collection_name metaType 
+            gc=bpxwunix(dbbcli ,,build_groups.,bge.)                 
+            if build_groups.0 > 6 then  do /* are there any build reults? */
+                bg_cnt=build_groups.7              
+                build_count = word(bg_Cnt,3); tot_br=build_count+tot_br
+
+                /* get last build result info */
+                dbbcli = 'dbb build-result find-last --build-group',
+                     collection_name metaType '--state 2 --status 0' 
+                gc=bpxwunix(dbbcli ,,last_build.,lbe.)       
+                last_build_date = word(last_build.7,2)
+                last_build_date = getKeyValue('label:') 
+                gitHash = getKeyValue(':githash:') /* one repo only*/           
+                Last_build_info=last_build_date",Hash:"left(strip(gitHash),7)
+
+            end 
+        end
+        else tot_oLG=collection_fileCnt+tot_oLG
+
+        /* print collection summary */
+        say left(' 'collection_name,40,.),
+            left(collection_fileCnt,15),
+            left(build_count,15),            
+            last_build_info
+    end
+
+    say; say '***'
+    say 'Total Applications under DBB =' tot_colls/2 
+    say 'Total Source Logical Files   =' tot_sLG
+    say 'Total Output Logical Files   =' tot_oLG
+    say 'Total Build Results          =' tot_br
+
+
+    /* provide some notes */
+    say; say '***'; say 'Notes:'; 
+    say 'Applications are scanned by DBB and dependency information',
+    'stored as Logical Files across two collections.',
+    'One collection has source files. '
+    say 'The other, ending in `outputs`,',
+    'stores link-edit dependency information like static module names.'
+    
+    say ; say 'Build Results are the number of reports grouped by',
+    'application source collection name.'
+    say 'Use that name in the dbbprune utility to delete old reports.'
+
+
+    say; say 'Refer to the latest DBB doc for other useful cli cmds:'
+
+ say "  https://www.ibm.com/docs/en/dbb/2.0?topic=metadata-store-command-line-interface"
+ say '***'
+
+exit 
+
+
+init:  
+    h1=left('App Collections (Build Group)',40,'_')
+    h2=left('Logical Files',15,'_')
+    h3=left('Build Results',15,'_')
+    h4='Last Successful Build Label,GitHash'
+    
+    tot_colls=0
+    tot_sLG=0
+    tot_oLG=0
+    tot_br=0
+
+    metaType = '-t file'  /* can be db2- see DBB doc for details */ 
+    say '*** DBB App Summary Report         (dbbrpt.rexx) Date:' date('S') '***'
+    say '    Using DBB cli with a hardcoded MetaDataStore('metaType')'
+    say ' '
+return 
+
+
+getKeyValue: procedure expose last_build. /* key is the first word a line*/
+    parse arg key
+    value = ''   
+    do x = 1 to last_build.0        
+        key1=left(last_build.x,length(key))        
+        if key = key1 then parse var last_build.x . value
+    end
+return value     
+    
+errOut:
+    say 'DBB CLI encountered a problem.', 
+    'Check that the DBB environment is correct and that the',
+    'hardcoded metadataStore is properly defined. '
+
+    gc=bpxwunix(dbbcli)       
+exit 12
+/* always add one blank line at end? */
+
