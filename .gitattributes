@@ -9,6 +9,7 @@ dbb-v2/dbb-zappbuild/** zos-working-tree-encoding=ibm-1047 git-encoding=utf-8 -t
 
 .gitattributes zos-working-tree-encoding=iso8859-1 git-encoding=utf-8 text !diff
 
-# side note. To del all git hist:
+# side note. To del all git hist from windows or Z
 #           del .git, init, add., git remote add origin git@github.com:nlopez1-ibm/waziDBB.git 
 #           commit, git push -u --force origin main
+#           if done on windows, del the repo in Z and re-clone 
