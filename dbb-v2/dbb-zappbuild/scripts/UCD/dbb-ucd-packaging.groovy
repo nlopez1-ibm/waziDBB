@@ -235,6 +235,8 @@ shiplistFile.text = writer
 // command parameters can be found at
 // https://www.ibm.com/support/knowledgecenter/SS4GSP_6.2.7/com.ibm.udeploy.doc/topics/zos_runtools_uss.html
 
+// njl Feb 2024 - add v2 packaging 
+// v2 broken must add a deploy type at the container level- maybe this is old code- fell back
 def cmd = [
 	properties.buztoolPath,
 	"createzosversion",
