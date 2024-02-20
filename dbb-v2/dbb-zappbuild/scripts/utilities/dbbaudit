@@ -1,27 +1,36 @@
-/* rexx   
- dbbaudit util (nlopez) cross references it load-SSI with Git consistancy (Endvr CAST-like equivalent)
- Purpose: An independant audit check of DBB artifacts within a deployable package.
- Flow:  CI creates and publishes a package of DBB build artifacts which includes the DBBs BuildReport.json. 
-        CD reads the package and:
-            - unpacks tar
-            - extracts DBB BuildReport info (repo, hash, date, buildGroup with its topic/branch)
-            - runs abmlist to extract each csects hash-ssi, build date, and any static module(s).
-            - run a git show on the topic/branch by DBB hash for each repo 
-            - ??? needs all included dependency set files (aka copybook)
+/* rexx
 
- Spported Package must include a DBB buildReport(BR) as with 
-     https://github.com/IBM/dbb/tree/main/Pipeline/PackageBuildOutputs
- buztool packages are not supported yet (BR is not in package) 
+bbmm - looks good at git clone phase to diff repos ...  
+need to all all related dep file in git diff rpt v2
 
- runAs /u/ibmuser/waziDBB/dbb-v2/dbb-zappbuild/scripts/utilities/dbbaudit  
- 
- /u/ibmuser/ibm-ucd/agent/var/work/poc-component/package.zip 
- todo 
-    cross repo support and tag
-    senthil add all source xref like copybooks -requires compiler listing in package (or in dbb meta)    
-    add ucd buztool packaging support package.zip with which has no metadata just art's meta in ucd
 
- 
+    dbbaudit util (nlopez) cross references it load-SSI with Git consistancy (Endvr CAST-like equivalent)
+    Purpose: An independant audit check of DBB artifacts within a deployable package.
+    Flow:  CI creates and publishes a package of DBB build artifacts which includes the DBBs BuildReport.json. 
+            CD reads the package and:
+                - unpacks tar
+                - extracts DBB BuildReport info (repo, hash, date, buildGroup with its topic/branch)
+                - runs abmlist to extract each csects hash-ssi, build date, and any static module(s).
+                - run a git show on the topic/branch by DBB hash for each repo 
+                - ??? needs all included dependency set files (aka copybook)
+                - assumes 
+                    - all shared code is configured in app-conf (non-cross wire model)
+                    - shared objects like copybooks and static calls have unique names 
+
+
+    Spported Package must include a DBB buildReport(BR) as with 
+        https://github.com/IBM/dbb/tree/main/Pipeline/PackageBuildOutputs
+    buztool packages are not supported yet (BR is not in package) 
+
+    runAs /u/ibmuser/waziDBB/dbb-v2/dbb-zappbuild/scripts/utilities/dbbaudit  
+    
+    /u/ibmuser/ibm-ucd/agent/var/work/poc-component/package.zip 
+    todo 
+        cross repo support and tag
+        senthil add all source xref like copybooks -requires compiler listing in package (or in dbb meta)    
+        add ucd buztool packaging support package.zip with which has no metadata just art's meta in ucd
+
+    
 */ 
  
 /* parse arg  packagePath     <- hardcode for testing */
@@ -37,9 +46,7 @@ if exists(packagePath) = "" then do
 /* Unpack the release package in a tmp folder to examine its contents */
     /* x=Directory(packagePath) <>"" then do */ 
 
-    cmd = 'cd; mkdir -p tmp_audit; cd tmp_audit; cp packagePath .; pax -rvf ' packagePath 
-    /* pax -rvf /u/ibmuser/ibm-ucd/agent/var/work/poc-component/package.zip */
-    
+    cmd = 'cd; rm tmp_audit; mkdir tmp_audit; cd tmp_audit; cp packagePath .; pax -rvf ' packagePath      
     x=bpxwunix(cmd ,,cmdo.,cmde.)  
     /* if cmde.0 > 0 then do; say 'Error unpacking with cmd' cmd ; say  cmde.0 ; exit 12 ; end  */
     x=Directory('tmp_audit') 
@@ -48,11 +55,11 @@ if exists(packagePath) = "" then do
     'iconv -f UTF-8 -t IBM-1047 BuildReport.json > BR '
 
 
-/* Read the DBB build report */     
+/* Read the DBB build report into a stem called line*/     
     x=bpxwunix('cat BR' ,,buildReport.,cmde.)  
     line = BuildReport.1 /* its a stream no NL */
-
-/* parse the output artifacts from the report to generate AMBLIST Control Cards */
+ 
+/* Parse the Build Report and generate AMBLIST Control Cards per LOAD*/
     outputs.0 = 0 
     do while length(line) > 1
         px = pos('"outputs":',line)
@@ -61,7 +68,7 @@ if exists(packagePath) = "" then do
         if px > 0 then do        
             line = substr(line,px)
             parse var line . 'dataset":"' syslmod '(' mem ')"' line
-            ox = outputs.0; ox = ox + 1; outputs.ox = mem; outputs.0 = ox 
+            ox = outputs.0 + 1; outputs.ox = syslmod',' mem; outputs.0 = ox 
 
             if ox = 1 then 
                 'echo " LISTIDR MEMBER=('mem'.LOAD),OUTPUT=ALL"  > cntl '
@@ -71,39 +78,137 @@ if exists(packagePath) = "" then do
         else line =''
     end 
 
-/* parse additional DBB info about the build in this package */
-buildResult = '' 
-buildResultGroup = ''  /* aka collection with branch as the suffix*/
-gitRepo=''
-gitHash=''
-gitURL=''
+/* parse DBB build Result info in this package */
+    buildResult = '' 
+    buildResultGroup = ''  /* aka collection with branch as the suffix*/
 
-line = BuildReport.1
+    /* only one instance of these keywords so parse is simple */
+    parse var line .    'label":"'   buildResult '"' .
+    parse var line .    'group":"'   buildResultGroup '"' . 
 
-/* assume one instance of these keywords.  Need to add multi-repo support */
-parse var line .    'label":"'   buildResult '"' .
-parse var line .    'group":"'   buildResultGroup '"' . 
-parse var line .    ':githash:'  . '":"' gitHash '"' .
-parse var line .    ':giturl:'   . '":"' gitURL '"' . 
+/* Parse build Report repo refs -  can have one or more repo refs and hash so add to stem */
+    sGitRepo. = ""   /* This is a array of repo names to resolve the associate data structure */
+    sGitRepo.0 = 0   /* This stem is a data structure to model by repo name  with url and hash elements */
 
- 
-if outputs.0 > 0 then do 
-    cmd='amblist  'packagePath'/tmp/'syslmod ' < cntl '         
+
+    /* look for a keyword prefix of :git it can be a repo url or it hash of a repo  */
+    line = BuildReport.1 /* refresh the line var */
+    do while length(line) > 1
+        px = pos('":git',line) 
+        if px > 0 then do        
+            line = substr(line,px)            
+            parse var line . ':' xKw ":" xGitRef '":' xGitValue "," line
+            xGitValue = cleanFileName(xGitValue) 
+            if sGitRepo.xGitRef = "" then   do
+
+                rx = sGitRepo.0+1; sGitRepo.rx = xGitRef; sGitRepo.0 = rx
+                sGitRepo.xGitRef = 'added' 
+                end 
+
+            if xKw = 'giturl' then do   
+                sGitRepo.xGitRef.url = xGitValue
+                end 
+            else do
+                sGitRepo.xGitRef.hash = xGitValue
+                end 
+        end
+        else line =''
+    end
+    /* trace 
+    do  rx = 1 to sGitRepo.0
+        xGitRef = sGitRepo.rx
+        say xGitRef  'url '   sGitRepo.xGitRef.url  sGitRepo.xGitRef.hash  
+    end 
+    */ 
+
+/* Parse build Report dependencySets. Complex parsing but same concept as above.
+   Scroll thru the BuildReport finding key value pairs  */
+    sDepSet.    = ''                    /* use a stem */ 
+    sDepSet.0   = 0                     /* Like a dict where 0 is the index */ 
+    line        = BuildReport.1         /* refresh the line var */
+    ds_KW       = '"dependencySet":['
+
+    do while length(line) > 1
+        /* px is the current depSet position. Split the line from px to create a head portion.
+           At the end of that head is the depSets source filename.   
+           Pushing rexx to parse complex json is not a good idea - but ok for prototyping. 
+        */   
+        px = pos(ds_KW,line)
+        if px > 0 then do 
+            /* new depSet - get the filename of this depSet */ 
+            dSetFile = GetLastValue(substr(line,1,px), "file")      /* scan head for last file kw*/       
+            dx=sDepSet.0+1;  sDepSet.0=dx; sDepSet.dx=dSetFile      /* save depSets filename */  
+            sDepSet.dSetFile.files.0 = 0 
+            line = substr(line,px)                                  /* scroll the line  */ 
+        
+            /* find all dependancies for the depSet file - like copybooks */
+            parse var line xDepSet "]" line 
+
+            kwords = cleanStr(xDepSet)   /* convert extra chars to blanks to spin by words */                    
+            do w = 1 to words(kwords)
+                if word(kwords,w) = "file" then do  /* pull the file names */
+                    xf = sDepSet.dSetFile.files.0+1; sDepSet.dSetFile.files.0 = xf
+                    dFileName = cleanFileName(word(kwords,w+1))
+                    sDepSet.dSetFile.files.xf = dFileName   
+                end 
+
+                if word(kwords,w) = "category" then do 
+                    /* assume cat is always after the last dFileName */
+                    sDepSet.dSetFile.dFileName.cat  = word(kwords,w+1)
+                end   
+            end 
+        end 
+        else 
+            line = ""
+    end 
+
+    /* resulting stem structure:  
+        using a root index stem to travers the structure like a dict. 
+        sDepSet.0  is a list of depSet filename dSetFile
+        sDepSet.<dSetFile>.files.0 is a list of dependancies dFileName
+         sDepSet.<dSetFile>.<dFileName>.cat is the dFIleName's category like COPY or LINK
+        example traversing loop below 
+    */
+    /* use this for debug 
+    do x = 1 to sDepSet.0  /* for each DepSet */
+        dSetFile = sDepSet.x
+        say 'DepSet Main File <dSetFile>:' dSetFile ' and each of its dependancies:' 
+        do xf = 1 to sDepSet.dSetFile.files.0
+            dFileName = sDepSet.dSetFile.files.xf 
+            dCat =    sDepSet.dSetFile.dFileName.cat
+            say 'Dependency ' dFileName dCat  
+        end 
+    end 
+    */
+
+/* End of parsing section ******
+   
+   
+   Run AMBList on each load mod ******
+*/
+
+/* did we find outputs - loads only for now */ 
+do ox = 1 to outputs.0  
+    parse var outputs.ox syslmod "," . 
+
+    cmd='amblist  'syslmod ' < cntl '         
     x=bpxwunix(cmd ,,ambo.,ambe.)
 
+    /* parse amblist sysout and build a stem using the mem name as a var */
     do ax = 1 to ambo.0
         if pos('MEMBER NAME:',ambo.ax) > 0 then do                          
             mem = word(ambo.ax, 4 ); parse var mem mem '.' .                        
             outputs.mem.SSI#  = ''
             outputs.mem.dDate = '' 
             outputs.mem.dTime = '' 
-            outputs.mem.subs.0 = 0              
+            outputs.mem.subs.0 = 0           
+ 
         end 
 
         if pos('MODULE SSI:',ambo.ax) > 0 then
             outputs.mem.SSI# = word(ambo.ax, 4 ) 
              
-
+ 
         if pos('THIS PROGRAM OBJECT WAS ORIGINALLY',ambo.ax) > 0 then do
             outputs.mem.dDate = word(ambo.ax, 13 ) 
             outputs.mem.dTime   = word(ambo.ax, 15 ) 
@@ -125,32 +230,34 @@ if outputs.0 > 0 then do
             end 
         end 
     end 
+end 
+
     
 
     /* Report Phase: generate the audit report */
-    say 'dbbAudit Package Audit for ' packagePath"/package.tar"  
-    say 
-    say ' DBB Build Result:' buildResult
-    say ' DBB Build  Group:' buildResultGroup
-    say 
-    say ' Git Source  Repo:' gitURL
-    say '         Git Hash:' gitHash
-    say 
-    say '  Summary of modules to be released:'
+        say 'dbbAudit Package Audit for ' packagePath"/package.tar"  
+        say 
+        say ' DBB Build Result:' buildResult
+        say ' DBB Build  Group:' buildResultGroup
+        say 
+        say ' Git Source  Repo:' gitURL
+        say '         Git Hash:' gitHash
+        say 
+        say ' Summary of modules in this release package (AMBLIST):'
 
-    do ox = 1 to outputs.0
-        mem = outputs.ox
-        say '         LoadMod: ' LEFT(mem,10),
-            'SSI: ' outputs.mem.SSI#, 
-            'BuildDate/Time:' outputs.mem.dDate outputs.mem.dTime
-        if sx = outputs.mem.subs.0 > 0 then do            
-            do sx = 1 to outputs.mem.subs.0
-                say '                   Static SubMod:' outputs.mem.subs.sx 
+        do ox = 1 to outputs.0
+            parse var outputs.ox syslmod ',' mem . 
+            say '         LoadMod: ' LEFT(mem,10),
+                'SSI: ' outputs.mem.SSI#, 
+                'BuildDate/Time:' outputs.mem.dDate outputs.mem.dTime
+            if sx = outputs.mem.subs.0 > 0 then do            
+                do sx = 1 to outputs.mem.subs.0
+                    say '                   Static SubMod:' outputs.mem.subs.sx 
+                end 
             end 
-        end 
 
     end  
-end 
+ 
 
 /* improve this  part of the report when no output were found */
 if outputs.0 = 0 then do
@@ -162,14 +269,54 @@ if outputs.0 = 0 then do
 
 
 /* add the Git Diff xref report */
-/* uplift notes: use java or curl to run this as an api and avoid the clone. */
-say 
-say'Listing Git source file information related to this release: '
-'rm -rf tempRepo; git clone ' gitURL 'tempRepo 2> gr '
-'cd tempRepo; git config core.pager cat' 
-'cd tempRepo; git show ' gitHash '--compact-summary '
+    /* uplift notes: use java or curl to run this as an api and avoid the clone. */
+    /* use this to derive the brabch used in this build by hash   git branch --contains <commit-hash> is that the same as the show ?*/
+    /* maybe nice to inject the drist feature here too */
+    say 
+    say'Listing Git source file information related to this release: '
+     do  rx = 1 to sGitRepo.0
+        xGitRef = sGitRepo.rx
 
+        say xGitRef  'url '   sGitRepo.xGitRef.url  sGitRepo.xGitRef.hash
+
+
+        'rm -rf tempRepo_'rx 
+        'git clone ' sGitRepo.xGitRef.url 'tempRepo_'rx '2> gr ' 
+         
+        'cd tempRepo_'rx '; git config core.pager cat' 
+        'cd tempRepo_'rx'; git show ' sGitRepo.xGitRef.hash '--compact-summary '
+  
+    end 
+    
 exit 
+
+/* new procs */
+getLastValue: 
+    parse arg  iStr, kw
+    lpx  = lastpos(kw,iStr)  
+    sStr = substr(iStr,lpx)
+    
+    parse var sStr  . ':"' sStr  '"' .
+    sStr = cleanFileName(sStr)
+    /* no built in replace char so do this to remove the \ */
+    return sStr 
+
+cleanFileName: /* remove \ in path of file or url */
+    parse arg iStr
+    l=""
+    cFileName = translate(iStr,"","\")                              /* makes it a blank */
+    do cfw = 1 to words(cFileName); l=l""word(cFileName,cfw); end     /* remove blank */
+    return l 
+
+cleanStr: 
+    parse arg str 
+    str  = translate(str,"",":")
+    str  = translate(str,"",",")
+    str  = translate(str,"","{")
+    str  = translate(str,"","}")
+    str  = translate(str,"",'"')
+    return str 
+
 
 
 
@@ -344,7 +491,7 @@ exit
     from zfs 
 
     x=bpxwunix('echo " LISTIDR MEMBER=(DATBATCH.LOAD),OUTPUT=IDENT"  > cntl')
-    amb="amblist  /u/ibmuser/ibm-ucd/agent/var/work/poc-component/IBMUSER.PIPELINE.LOAD < cntl | grep SSI: | cut -c 57-64 "
+    amb="amblist  /u/ibmuser/ibm-ucd/agent/var/work/poc-component/IBMUSER.PIPELINE.LOAD < cntl | grep SSI: | cut -c 57-6
 
 
     from pds 
