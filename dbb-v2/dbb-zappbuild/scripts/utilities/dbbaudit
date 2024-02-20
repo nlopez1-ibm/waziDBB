@@ -106,10 +106,11 @@ if exists(packagePath) = "" then do
                 end 
 
             if xKw = 'giturl' then do   
-                sGitRepo.xGitRef.url = xGitValue
+                sGitRepo.xGitRef.url = cleanFileName(xGitValue)
+
                 end 
             else do
-                sGitRepo.xGitRef.hash = xGitValue
+                sGitRepo.xGitRef.hash = cleanStr(xGitValue)
                 end 
         end
         else line =''
@@ -287,6 +288,9 @@ if outputs.0 = 0 then do
         'cd tempRepo_'rx'; git show ' sGitRepo.xGitRef.hash '--compact-summary '
   
     end 
+    /* sample to pretty form each dep file in set 
+     git log --pretty=format:"%h  %an %ad %n" common-source/common-static-calls/STATIC1.cbl
+     */
     
 exit 
 
@@ -314,6 +318,8 @@ cleanStr:
     str  = translate(str,"",",")
     str  = translate(str,"","{")
     str  = translate(str,"","}")
+    str  = translate(str,"","[")
+    str  = translate(str,"","]")
     str  = translate(str,"",'"')
     return str 
 
