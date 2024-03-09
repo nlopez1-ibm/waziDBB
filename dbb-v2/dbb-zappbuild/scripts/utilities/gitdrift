@@ -1,8 +1,8 @@
 /* rexx gitdrift (nlopez)
     script to detect prod and lowe branch diff like hotfix during an ongoing build/release sprint
-    Note: If Main is Merged with release branches, the merge commitID may appear as a Diif in this 
-          report.  Consider using git REBASE to merge release into produciton for a cleaner history. 
-          This report will exlucde merge commits.
+    Note: If Main is Merged with release branches, the merge commitID may appear as a Diff in this 
+          report.  Consider using git REBASE to merge release into production for a cleaner history. 
+          This report will exclude merge commits.
 */    
 parse arg workDir prodBranchName 
 call init 

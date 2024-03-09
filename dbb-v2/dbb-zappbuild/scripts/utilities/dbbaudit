@@ -1,11 +1,11 @@
-/* rexx
+/* rexx dbbAudit v1.5a Full view
 
 bbmm - looks good at git clone phase to diff repos ...  
 need to all all related dep file in git diff rpt v2
 
 
-    dbbaudit util (nlopez) cross references it load-SSI with Git consistancy (Endvr CAST-like equivalent)
-    Purpose: An independant audit check of DBB artifacts within a deployable package.
+    dbbaudit util (nlopez) cross references a packages load-SSI with Git consistency (Endvr CAST-like equivalent)
+    Purpose: An independent audit check of DBB artifacts within a deployable package.
     Flow:  CI creates and publishes a package of DBB build artifacts which includes the DBBs BuildReport.json. 
             CD reads the package and:
                 - unpacks tar
@@ -17,29 +17,32 @@ need to all all related dep file in git diff rpt v2
                     - all shared code is configured in app-conf (non-cross wire model)
                     - shared objects like copybooks and static calls have unique names 
 
+    pre-req:
+        - build with SSI enabled 
+        - Create packages with PackageBuildOutputs (scripted method used in wazi Deploy - ahs more details)
+        - clone repo(s) in BR to diff... not sure whcih branch the shared repo is at. can use BR rp name for branch name  
 
-    Spported Package must include a DBB buildReport(BR) as with 
+    Supported Package must include a DBB buildReport(BR) as produce by  
         https://github.com/IBM/dbb/tree/main/Pipeline/PackageBuildOutputs
-    buztool packages are not supported yet (BR is not in package) 
+    buztool packages are not supported yet (BDBB BuildReport is not included in tar ) 
 
     runAs /u/ibmuser/waziDBB/dbb-v2/dbb-zappbuild/scripts/utilities/dbbaudit  
     
-    /u/ibmuser/ibm-ucd/agent/var/work/poc-component/package.zip 
     todo 
-        cross repo support and tag
+        wip - cross repo support and tag
         senthil add all source xref like copybooks -requires compiler listing in package (or in dbb meta)    
         add ucd buztool packaging support package.zip with which has no metadata just art's meta in ucd
-
+        nelson - add a dirft detecgion phase for extra checking 
     
 */ 
  
 /* parse arg  packagePath     <- hardcode for testing */
 packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2844/poc-workspace/package.tar'
-
+packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2852/poc-workspace/package.tar'
 
 if exists(packagePath) = "" then do 
     say "dbbaudit:  ERROR"
-    say 'DBB Package not found:' packagePath
+    say 'DBB Package not found <' packagePath '<'
     exit 12
     end 
 
@@ -79,6 +82,8 @@ if exists(packagePath) = "" then do
     end 
 
 /* parse DBB build Result info in this package */
+    line = BuildReport.1 /* refresh the line  */
+ 
     buildResult = '' 
     buildResultGroup = ''  /* aka collection with branch as the suffix*/
 
@@ -106,10 +111,11 @@ if exists(packagePath) = "" then do
                 end 
 
             if xKw = 'giturl' then do   
-                sGitRepo.xGitRef.url = xGitValue
+                sGitRepo.xGitRef.url = cleanFileName(xGitValue)
+
                 end 
             else do
-                sGitRepo.xGitRef.hash = xGitValue
+                sGitRepo.xGitRef.hash = cleanStr(xGitValue)
                 end 
         end
         else line =''
@@ -169,8 +175,9 @@ if exists(packagePath) = "" then do
          sDepSet.<dSetFile>.<dFileName>.cat is the dFIleName's category like COPY or LINK
         example traversing loop below 
     */
-    /* use this for debug 
-    do x = 1 to sDepSet.0  /* for each DepSet */
+
+    /* for each DepSet 
+    do x = 1 to sDepSet.0  
         dSetFile = sDepSet.x
         say 'DepSet Main File <dSetFile>:' dSetFile ' and each of its dependancies:' 
         do xf = 1 to sDepSet.dSetFile.files.0
@@ -240,10 +247,7 @@ end
         say ' DBB Build Result:' buildResult
         say ' DBB Build  Group:' buildResultGroup
         say 
-        say ' Git Source  Repo:' gitURL
-        say '         Git Hash:' gitHash
-        say 
-        say ' Summary of modules in this release package (AMBLIST):'
+        say ' Summary of Load Module artifacts in this package (AMBLIST):'
 
         do ox = 1 to outputs.0
             parse var outputs.ox syslmod ',' mem . 
@@ -268,25 +272,95 @@ if outputs.0 = 0 then do
      
 
 
-/* add the Git Diff xref report */
+/* add the Git Diff xref report 
+
+    not too sure about this. i cant tell what the tail of the diff was during the impact by=uild
+    and dbb deos not provide branch namae of shared repos 
+    with the tail Im just diff the head - last sucessful build hash with prior cmt - 
+    but cant be sure if something was not added just after the build like a hotfix
+    so diffis not reliable 
+
+    just dump the depSet already parse 
+    or git the comit file by file but from what branch??? 
+
+git log -n 1 --pretty=format:%H -- my/file.c
+
+
+
+    */
     /* uplift notes: use java or curl to run this as an api and avoid the clone. */
-    /* use this to derive the brabch used in this build by hash   git branch --contains <commit-hash> is that the same as the show ?*/
-    /* maybe nice to inject the drist feature here too */
+    /* use this to derive the branch used in this build by hash   git branch --contains <commit-hash> is that the same as the show ?*/
+    /* so not sure about this. what branch am I working on> can only derive from Br the Grou0p which is hte buuild branch
+      but it does not include common repors grojp names */
     say 
-    say'Listing Git source file information related to this release: '
+
+    /* USE THE MAIN builf group name to scan git diff */
+
+   
      do  rx = 1 to sGitRepo.0
         xGitRef = sGitRepo.rx
 
-        say xGitRef  'url '   sGitRepo.xGitRef.url  sGitRepo.xGitRef.hash
+        if pos(xGitref,buildResultGroup) > 0 then do /* todo: else say not supported */
+            say'Listing source file information related to this release: '
+   
+            /*found the main buildGroup name get the branch name clone it and diff by depSet file names 
+            */
 
+            branchPos = lastPos('-',buildResultGroup)
+            branch = right(buildResultGroup,branchPos-1)
+ 
+            say '  DBB Meta Data: '
+            say '    App Collection:' xGitRef  
+            say '    App  RepoURL  :' sGitRepo.xGitRef.url  
+            say '    Build Branch  :' branch  
+            say '    Build  HASH   :' left(sGitRepo.xGitRef.hash,8)
+           
 
-        'rm -rf tempRepo_'rx 
-        'git clone ' sGitRepo.xGitRef.url 'tempRepo_'rx '2> gr ' 
-         
-        'cd tempRepo_'rx '; git config core.pager cat' 
-        'cd tempRepo_'rx'; git show ' sGitRepo.xGitRef.hash '--compact-summary '
-  
+            'rm -rf 'xGitRef
+            'git clone  -b ' branch  sGitRepo.xGitRef.url xGitRef '2> gr ' 
+
+            say 
+            if sDepSet.0 > 0 then say "    Summary of Source Dependencies by main pgm and current Git commit info:"
+
+            do dx = 1 to sDepSet.0  
+                dSetFile = sDepSet.dx  /* the main file of this depSet */ 
+                say "          Main:" dSetFile 
+
+                do xf = 1 to sDepSet.dSetFile.files.0
+                    dFileName = sDepSet.dSetFile.files.xf 
+                    dCat =    sDepSet.dSetFile.dFileName.cat
+                    /* say 'Dependency ' dFileName dCat */ 
+                    
+                    /* say "          " dFileName   "Type: " dCat   */
+                
+                    if dCat = "COPY" then do
+                        cmd='git -C' xGitRef '-P log -n 1 --pretty=format:"%h,%ci,%an,%s" --' dFileName 
+                        x=bpxwunix(cmd ,,glog.,gloge.)
+
+                        do gx = 1 to glog.0
+                            gline = glog.gx
+                            parse var gline gHash ',' csDate csTime .  ',' anAuthor ',' sMsg 
+                            say '               'dFileName ' Commit ID:' gHash" Commit Date:"csDate csTime " Commit By:" anAuthor  
+                        end 
+                    end 
+                       
+                end 
+            end 
+            
+ 
+ 
+ 
+         /*
+            'cd ' xGitRef '; git config core.pager cat' 
+            'cd ' xGitRef '; git show ' sGitRepo.xGitRef.hash '--compact-summary '
+            */
+        end 
     end 
+ 
+
+    /* sample to pretty form each dep file in set 
+     git log --pretty=format:"%h  %an %ad %n" common-source/common-static-calls/STATIC1.cbl
+     */
     
 exit 
 
@@ -314,6 +388,8 @@ cleanStr:
     str  = translate(str,"",",")
     str  = translate(str,"","{")
     str  = translate(str,"","}")
+    str  = translate(str,"","[")
+    str  = translate(str,"","]")
     str  = translate(str,"",'"')
     return str 
 
