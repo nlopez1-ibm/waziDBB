@@ -241,27 +241,26 @@ end
 
     
 
-    /* Report Phase: generate the audit report */
-        say 'dbbAudit Package Audit for ' packagePath"/package.tar"  
-        say 
-        say ' DBB Build Result:' buildResult
-        say ' DBB Build  Group:' buildResultGroup
-        say 
-        say ' Summary of Load Module artifacts in this package (AMBLIST):'
+/* Report Phase: generate the audit report */
+    say 'dbbAudit Package Audit for ' packagePath"/package.tar"  
+    say 
+    say ' DBB Build Result:' buildResult
+    say ' DBB Build  Group:' buildResultGroup
+    say 
+    say ' Summary of Load Module artifacts in this package (AMBLIST):'
 
-        do ox = 1 to outputs.0
-            parse var outputs.ox syslmod ',' mem . 
-            say '         LoadMod: ' LEFT(mem,10),
-                'SSI: ' outputs.mem.SSI#, 
-                'BuildDate/Time:' outputs.mem.dDate outputs.mem.dTime
-            if sx = outputs.mem.subs.0 > 0 then do            
-                do sx = 1 to outputs.mem.subs.0
-                    say '                   Static SubMod:' outputs.mem.subs.sx 
-                end 
+    do ox = 1 to outputs.0
+        parse var outputs.ox syslmod ',' mem . 
+        say '         LoadMod: ' LEFT(mem,10),
+            'SSI: ' outputs.mem.SSI#, 
+            'BuildDate/Time:' outputs.mem.dDate outputs.mem.dTime
+        if sx = outputs.mem.subs.0 > 0 then do            
+            do sx = 1 to outputs.mem.subs.0
+                say '                   Static SubMod:' outputs.mem.subs.sx 
             end 
-
+        end 
     end  
- 
+
 
 /* improve this  part of the report when no output were found */
 if outputs.0 = 0 then do
