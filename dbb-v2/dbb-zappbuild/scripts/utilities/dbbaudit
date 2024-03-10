@@ -1,8 +1,4 @@
-/* rexx dbbAudit v1.5a Full view
-
-bbmm - looks good at git clone phase to diff repos ...  
-need to all all related dep file in git diff rpt v2
-
+/* rexx dbbAudit v1.5b Full view
 
     dbbaudit util (nlopez) cross references a packages load-SSI with Git consistency (Endvr CAST-like equivalent)
     Purpose: An independent audit check of DBB artifacts within a deployable package.
@@ -39,6 +35,8 @@ need to all all related dep file in git diff rpt v2
 /* parse arg  packagePath     <- hardcode for testing */
 packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2844/poc-workspace/package.tar'
 packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2852/poc-workspace/package.tar'
+packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2853/poc-workspace/package.tar'
+packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2854/poc-workspace/package.tar'
 
 if exists(packagePath) = "" then do 
     say "dbbaudit:  ERROR"
@@ -62,7 +60,7 @@ if exists(packagePath) = "" then do
     x=bpxwunix('cat BR' ,,buildReport.,cmde.)  
     line = BuildReport.1 /* its a stream no NL */
  
-/* Parse the Build Report and generate AMBLIST Control Cards per LOAD*/
+/* Parse the Build Report and generate AMBLIST Control Cards per LOAD */
     outputs.0 = 0 
     do while length(line) > 1
         px = pos('"outputs":',line)
@@ -81,7 +79,7 @@ if exists(packagePath) = "" then do
         else line =''
     end 
 
-/* parse DBB build Result info in this package */
+/* Parse DBB build Result info in this package */
     line = BuildReport.1 /* refresh the line  */
  
     buildResult = '' 
@@ -115,7 +113,7 @@ if exists(packagePath) = "" then do
 
                 end 
             else do
-                sGitRepo.xGitRef.hash = cleanStr(xGitValue)
+                sGitRepo.xGitRef.hash = strip(cleanStr(xGitValue))
                 end 
         end
         else line =''
@@ -168,99 +166,82 @@ if exists(packagePath) = "" then do
             line = ""
     end 
 
-    /* resulting stem structure:  
-        using a root index stem to travers the structure like a dict. 
-        sDepSet.0  is a list of depSet filename dSetFile
-        sDepSet.<dSetFile>.files.0 is a list of dependancies dFileName
-         sDepSet.<dSetFile>.<dFileName>.cat is the dFIleName's category like COPY or LINK
-        example traversing loop below 
-    */
+    /* DOC: sDepSet stem structure:  
+        using a root stem sDepSet.x to travers the structure like an index in a  dict. 
+        sDepSet.0  is a list of depSet filenames called dSetFile aka this is the tpi of a dbb dep grp and the  main program. 
+        sDepSet.<dSetFile>.files.0 is a list of a depSets dependancies called dFileName.
+        sDepSet.<dSetFile>.<dFileName>.cat is the dFileName's category like COPY or LINK.
+        example traversing loop below. 
+        */
 
-    /* for each DepSet 
-    do x = 1 to sDepSet.0  
-        dSetFile = sDepSet.x
-        say 'DepSet Main File <dSetFile>:' dSetFile ' and each of its dependancies:' 
-        do xf = 1 to sDepSet.dSetFile.files.0
-            dFileName = sDepSet.dSetFile.files.xf 
-            dCat =    sDepSet.dSetFile.dFileName.cat
-            say 'Dependency ' dFileName dCat  
-        end 
-    end 
-    */
-
-/* End of parsing section ******
-   
-   
-   Run AMBList on each load mod ******
-*/
-
-/* did we find outputs - loads only for now */ 
-do ox = 1 to outputs.0  
-    parse var outputs.ox syslmod "," . 
-
-    cmd='amblist  'syslmod ' < cntl '         
-    x=bpxwunix(cmd ,,ambo.,ambe.)
-
-    /* parse amblist sysout and build a stem using the mem name as a var */
-    do ax = 1 to ambo.0
-        if pos('MEMBER NAME:',ambo.ax) > 0 then do                          
-            mem = word(ambo.ax, 4 ); parse var mem mem '.' .                        
-            outputs.mem.SSI#  = ''
-            outputs.mem.dDate = '' 
-            outputs.mem.dTime = '' 
-            outputs.mem.subs.0 = 0           
- 
-        end 
-
-        if pos('MODULE SSI:',ambo.ax) > 0 then
-            outputs.mem.SSI# = word(ambo.ax, 4 ) 
-             
- 
-        if pos('THIS PROGRAM OBJECT WAS ORIGINALLY',ambo.ax) > 0 then do
-            outputs.mem.dDate = word(ambo.ax, 13 ) 
-            outputs.mem.dTime   = word(ambo.ax, 15 ) 
-        end 
-
-        if word(ambo.ax,1) = 'CSECT:' then do 
-            sub=word(ambo.ax,2)             
-
-            if left(sub,3) = 'CEE' | left(sub,3) = 'IGZ' | sub=mem then 
-                skip=skip 
-            else do
-                sx = outputs.mem.subs.0
-                sx = sx + 1 
-                axx = ax +1
-                s_buildDate = word(ambo.axx,4)
-                outputs.mem.subs.sx = right(sub,10),
-                            'BuildDate:'right(s_buildDate,16)
-                outputs.mem.subs.0 = sx 
+        /* for each DepSet 
+        do x = 1 to sDepSet.0  
+            dSetFile = sDepSet.x
+            say 'DepSet Main File <dSetFile>:' dSetFile ' and each of its dependancies:' 
+            do xf = 1 to sDepSet.dSetFile.files.0
+                dFileName = sDepSet.dSetFile.files.xf 
+                dCat =    sDepSet.dSetFile.dFileName.cat
+                say 'Dependency ' dFileName dCat  
             end 
         end 
-    end 
-end 
+        */
 
+
+/* Run AMBLIST on all packaged Load mod into Outputs stem */
+    do ox = 1 to outputs.0   
+        parse var outputs.ox syslmod "," . 
+
+        cmd='amblist  'syslmod ' < cntl '         
+        x=bpxwunix(cmd ,,ambo.,ambe.)
+
+        /* parse amblist sysout and build a stem using the mem name as a var */
+        do ax = 1 to ambo.0
+            if pos('MEMBER NAME:',ambo.ax) > 0 then do                          
+                mem = word(ambo.ax, 4 ); parse var mem mem '.' .                        
+                outputs.mem.SSI#  = ''
+                outputs.mem.dDate = '' 
+                outputs.mem.dTime = '' 
+                outputs.mem.subs.0 = 0           
     
+                end 
+            if pos('MODULE SSI:',ambo.ax) > 0 then
+                outputs.mem.SSI# = word(ambo.ax, 4 ) 
+                
+    
+            if pos('THIS PROGRAM OBJECT WAS ORIGINALLY',ambo.ax) > 0 then do
+                outputs.mem.dDate = word(ambo.ax, 13 ) 
+                outputs.mem.dTime   = word(ambo.ax, 15 ) 
+                end 
+            if word(ambo.ax,1) = 'CSECT:' then do 
+                sub=word(ambo.ax,2)             
 
-/* Report Phase: generate the audit report */
-    say 'dbbAudit Package Audit for ' packagePath"/package.tar"  
-    say 
-    say ' DBB Build Result:' buildResult
-    say ' DBB Build  Group:' buildResultGroup
-    say 
-    say ' Summary of Load Module artifacts in this package (AMBLIST):'
-
-    do ox = 1 to outputs.0
-        parse var outputs.ox syslmod ',' mem . 
-        say '         LoadMod: ' LEFT(mem,10),
-            'SSI: ' outputs.mem.SSI#, 
-            'BuildDate/Time:' outputs.mem.dDate outputs.mem.dTime
-        if sx = outputs.mem.subs.0 > 0 then do            
-            do sx = 1 to outputs.mem.subs.0
-                say '                   Static SubMod:' outputs.mem.subs.sx 
-            end 
+                if left(sub,3) = 'CEE' | left(sub,3) = 'IGZ' | sub=mem then 
+                    skip=skip 
+                else do
+                    sx = outputs.mem.subs.0
+                    sx = sx + 1 
+                    axx = ax +1
+                    s_buildDate = word(ambo.axx,4)
+                    outputs.mem.subs.sx = right(sub,10),
+                                'BuildDate:'right(s_buildDate,16)
+                    outputs.mem.subs.0 = sx 
+                end 
+                end 
         end 
-    end  
+    end 
 
+
+/* End of Build Report parsing Phase  ****** */ 
+
+/* Report Phase: Generate the audit report Headings */
+    say 'dbbAudit Started On ' date() 
+    say
+    say ' Inspecting contents of DBB Package:'
+    say '  ' packagePath
+    say 
+    say ' Extracted DBB Build Info:'
+    say '   DBB Build Label :' buildResult
+    say '      Build  Group :' buildResultGroup
 
 /* improve this  part of the report when no output were found */
 if outputs.0 = 0 then do
@@ -270,100 +251,102 @@ if outputs.0 = 0 then do
     end 
      
 
-
-/* add the Git Diff xref report 
-
-    not too sure about this. i cant tell what the tail of the diff was during the impact by=uild
-    and dbb deos not provide branch namae of shared repos 
-    with the tail Im just diff the head - last sucessful build hash with prior cmt - 
-    but cant be sure if something was not added just after the build like a hotfix
-    so diffis not reliable 
-
-    just dump the depSet already parse 
-    or git the comit file by file but from what branch??? 
-
-git log -n 1 --pretty=format:%H -- my/file.c
-
-
-
+/* List source dependancies and related Git history for the main collection (App)  derived from build Group.   
+    Note: 
+        -DBB BuildReport does not include the branch for shared repos.  So I cant include them in the git log.          
+        -uplift notes: use java or curl to run this as an api on the git host and avoid the clone.
     */
-    /* uplift notes: use java or curl to run this as an api and avoid the clone. */
-    /* use this to derive the branch used in this build by hash   git branch --contains <commit-hash> is that the same as the show ?*/
-    /* so not sure about this. what branch am I working on> can only derive from Br the Grou0p which is hte buuild branch
-      but it does not include common repors grojp names */
-    say 
 
-    /* USE THE MAIN builf group name to scan git diff */
-
-   
-     do  rx = 1 to sGitRepo.0
+    /* Use the Main collections repoURL to extract a git log per dependancies */
+    do  rx = 1 to sGitRepo.0
         xGitRef = sGitRepo.rx
 
         if pos(xGitref,buildResultGroup) > 0 then do /* todo: else say not supported */
-            say'Listing source file information related to this release: '
-   
-            /*found the main buildGroup name get the branch name clone it and diff by depSet file names 
-            */
+        
+            /*found the repo of the main buildGroup. Get its branch name. Clone it for gitlog of each depFiles in the depSet */ 
 
             branchPos = lastPos('-',buildResultGroup)
             branch = right(buildResultGroup,branchPos-1)
- 
-            say '  DBB Meta Data: '
-            say '    App Collection:' xGitRef  
-            say '    App  RepoURL  :' sGitRepo.xGitRef.url  
-            say '    Build Branch  :' branch  
-            say '    Build  HASH   :' left(sGitRepo.xGitRef.hash,8)
-           
+            say '       App Name    :' xGitRef  
+            say '       App RepoURL :' sGitRepo.xGitRef.url  
+            say '       Branch      :' branch  
+            say '    Build Git Hash :' left(sGitRepo.xGitRef.hash,8)
+            say        
 
             'rm -rf 'xGitRef
-            'git clone  -b ' branch  sGitRepo.xGitRef.url xGitRef '2> gr ' 
+            'git clone  -b ' branch   sGitRepo.xGitRef.url xGitRef '2> gr ' /* dont shallow this as some depFiles may be old */ 
 
-            say 
-            if sDepSet.0 > 0 then say "    Summary of Source Dependencies by main pgm and current Git commit info:"
-
+            if sDepSet.0 > 0 then
+                say " Program(s) and thier dependencies used in this build.  Includes Git history as of the above DBB Git Hash:"
+            else 
+                say " No dependencies deteccted by DBB in this package"
+            
             do dx = 1 to sDepSet.0  
-                dSetFile = sDepSet.dx  /* the main file of this depSet */ 
-                say "          Main:" dSetFile 
+                dSetFile = sDepSet.dx  /* the main file of a depSet */ 
+                say "   Main:" dSetFile 
 
+                /* for each depfile in the set, get git info or just show the name */
                 do xf = 1 to sDepSet.dSetFile.files.0
-                    dFileName = sDepSet.dSetFile.files.xf 
-                    dCat =    sDepSet.dSetFile.dFileName.cat
-                    /* say 'Dependency ' dFileName dCat */ 
-                    
-                    /* say "          " dFileName   "Type: " dCat   */
-                
-                    if dCat = "COPY" then do
-                        cmd='git -C' xGitRef '-P log -n 1 --pretty=format:"%h,%ci,%an,%s" --' dFileName 
-                        x=bpxwunix(cmd ,,glog.,gloge.)
-
-                        do gx = 1 to glog.0
-                            gline = glog.gx
+                    dFileName   = sDepSet.dSetFile.files.xf 
+                    dCat        = sDepSet.dSetFile.dFileName.cat
+                   
+                    if dCat = "COPY" then do                     
+                        /* git log from the DBB build hash to get the latest ver of a depFile avoiding picking up changes after the packaging. */
+                        /* cmd='git -C' xGitRef '-P log -n 1' sGitRepo.xGitRef.hash '--pretty=format:"%h,%ci,%an,%s" --' dFileName                        
+                        x=bpxwunix(cmd ,,glog.,gloge.)                          
+                        */
+                        say getGitLog 
+                        /* if glog.0 >  0 then say getGitLog
+                           
+                            gline = glog.1                        
                             parse var gline gHash ',' csDate csTime .  ',' anAuthor ',' sMsg 
-                            say '               'dFileName ' Commit ID:' gHash" Commit Date:"csDate csTime " Commit By:" anAuthor  
-                        end 
+                            say '             'dFileName ' Commit:' gHash" Commit Date:"csDate csTime " Commit By:" anAuthor  
+                        end
+                        */  
+                        else 
+                            say '             'dFileName ' <(2) Git branch unknown> ' /* branch is not in the BR */  
                     end 
-                       
                 end 
             end 
-            
- 
- 
- 
-         /*
-            'cd ' xGitRef '; git config core.pager cat' 
-            'cd ' xGitRef '; git show ' sGitRepo.xGitRef.hash '--compact-summary '
-            */
         end 
     end 
- 
+/* Done */     
 
-    /* sample to pretty form each dep file in set 
-     git log --pretty=format:"%h  %an %ad %n" common-source/common-static-calls/STATIC1.cbl
-     */
-    
+/* LISTLOAD REPORT */
+    say ; say ' Summary of load module artifacts in this package using AMBLIST:'
+
+    do ox = 1 to outputs.0
+        parse var outputs.ox syslmod ',' mem . 
+        say '   LoadMod: ' LEFT(mem,10),
+            'SSI: ' outputs.mem.SSI#, 
+            'BuildDate/Time:' outputs.mem.dDate outputs.mem.dTime
+        if sx = outputs.mem.subs.0 > 0 then do            
+            do sx = 1 to outputs.mem.subs.0
+                say '             Static SubMod:' outputs.mem.subs.sx 
+            end 
+        end 
+
+    end  
+
+
+
+
+
 exit 
 
-/* new procs */
+/* procs */
+getGitLog:
+    cmd='git -C' xGitRef '-P log -n 1' sGitRepo.xGitRef.hash '--pretty=format:"%h,%ci,%an,%s" --' dFileName                        
+    x=bpxwunix(cmd ,,glog.,gloge.)                          
+    if glog.0 = 0 then 
+        CommitInfo = '<(1) Git Info Not available 'gloge.1'>'
+    else do   
+        gline = glog.1                        
+        parse var gline gHash ',' csDate csTime .  ',' anAuthor ',' sMsg 
+        CommitInfo= '             'dFileName ' Commit:' gHash" Commit Date:"csDate csTime " Commit By:" anAuthor  
+    end 
+    return CommitInfo
+
 getLastValue: 
     parse arg  iStr, kw
     lpx  = lastpos(kw,iStr)  
@@ -392,219 +375,6 @@ cleanStr:
     str  = translate(str,"",'"')
     return str 
 
-
-
-
-/* temp code section */
-    cmd= 'amblist  'packagePath'/IBMUSER.PIPELINE.LOAD  < cntl '
-    say cmd 
-    cmd 
-
-
-    'echo " LISTIDR MEMBER=(DATBATCH),OUTPUT=ALL"  > cntl'
-    exit 
-
-
-
-
-    echo " LISTIDR MEMBER=(DATBATCH),OUTPUT=IDENT"  > cntl
-    'amblist  'packagePath'/IBMUSER.PIPELINE.LOAD  < cntl '
-    exit 
-
-
-    dbbCollection='poc-app-develop' /* would be the main collection */
-    prodSyslmod='zdev.main.load' 
-    prodSyslmod='NLOPEZ.IDZ.LOAD'  /* USE THIS AS IT HAS SUB DATDEMO */
-    prodSyslmod='IBMUSER.PIPELINE.LOAD' /*test wi az ci mod1 cd lib */
-
-    /* cli test 
-    echo " LISTIDR MEMBER=(DATBATC),OUTPUT=IDENT"  > cntl
-    amblist  "//'zdev.main.load'"  < cntl | grep SSI: | cut -c 57-64
-        
-    */
-
-    /* assume mem are in a step from a build list or manifest */ 
-    loadModInfo.0 = 1 
-
-    loadModInfo.1.member = 'DATBATCH'  /* now has DEMOSUB Static call */
-    loadModInfo.1.SSI    = 'NA'
-    loadModInfo.1.ObjCreateDate    = 'NA'
-    loadModInfo.1.ObjCreateTime    = 'NA'
-
-    do lx = 1 to loadModInfo. 0 
-        'echo " LISTIDR MEMBER=('mem.1'),OUTPUT=IDENT"  > cntl'
-        /* the drep was nice for one key but need more so parse sysout */
-        /* cli="amblist  ""//'"prodSyslmod"'""  < cntl | grep SSI: | cut -c 57-64 " */
-
-        x=bpxwunix(cli ,,cmdo.,cmde.) 
-        if cmdo.0 > 3 then do       /* add err chk here like mem or pds not found ...*/
-        fileCnt = getKeysValue("filesProcessed") 
-        if fileCnt = '0' then errOut_noArtifacts_created
-        
-            mem.1.SSI  amb.1
-        end 
-        else do
-            say '*** ERROR scanning syslmod for mem' loadModInfo..lx.member
-            say cmde.0; say cmde.1
-            do ex = 1 to cmdo.0; say cmdo.ex; end 
-        end 
-
-
-
-    
-        say 'mem ssi=' mem.1.SSI 
-    end 
-    exit 
-    call init 
-
-    getLastDBB_Build:
-        cli='dbb build-result find-last --state 2 --status 0 --build-group ' dbbApp metaType
-        gc=bpxwunix(cli ,,cmdo.,cmde.)    
-        if cmde.0 <> 0 then call errOut_cant_access_app
-        
-        fileCnt = getKeysValue("filesProcessed") 
-        if fileCnt = '0' then errOut_noArtifacts_created
-                
-        say '** Complete' 
-    exit 0 
-
-
-
-    getKeysValue: procedure expose cmdo. /* key is the first word a line*/
-        parse arg key
-        value = ''
-        do x = 1 to cmdo.0        
-            key1=word(cmdo.x,1)
-            if key = key1 then parse var cmdo.x . value
-        end
-    return value 
-
-
-    init:     
-        x=bpxwunix('clear')
-        if dbbApp = ''  || syslmod = '' then do 
-            say 'dbbaudit Error! Invalid or missing args'
-            say '  Example run   ./dbbaudit <dbb_application_name> <syslmod> '  
-            say '     -<dbbApp>  Required: The name of the aplication built under DBB' 
-            say '                use the dbbrpt tool to view all application which' 
-            say '                DBB calls collections. '
-            say '     -<syslmod> Required: The PDSe where the load module were deployed.'
-            say ''        
-            say '  Prereqs: '
-            say '    - Enable zappbuild to generate SSI for load artifacts.'
-            say '      For example, see application-conf/Cobol.properties' 
-            say '    - Access to the target PDSe syslmod.'
-        
-            say ; say '***' 
-            exit 12
-        end
-        
-        metaType = '-t file'  /* can be db2- see DBB doc for details */ 
-        say '*** dbbaudit Util (v1.1): '
-        say '    Auditing Application "'dbbApp'" managed by DBB.' 
-        say '    Using local git client and DBB cli with a hardcoded MetaDataStore('metaType')'
-        say 
-    return
-
-    errOut_cant_access_app: 
-        say 'DBB CLI encountered a problem.' 
-        say 'Check that the DBB environment, and hardcoded metadataStore',
-            'are properly defined. Also check the DBB App name provide is valid.'
-        gc=bpxwunix(dbbcli)
-    exit 12
-
-
-    errOut_noArtifacts_created:
-        say 'Error: The lastest DBB build ??? produced no artifacts. ' 
-        say '       Review the last build log to determine for more information.'
-        
-
-
-
-
-
-
-
-
-/*
---- arch notes
- fyi 11-6 Suman mentioned a consisteny checker at CD using the manifest 
-    - like endevore and Sentils UBS sub pgb hoitfix stepping over iss
-    
-    - 2 features 
-        trace src to bin 
-        cast (freeze release pack and and  
-        
-    - make it groovy
-    - parse manifest to get build list (loads only) 
-    - find target loads ?
-    - pull ssi/date from staged libs and date too
-    - pull ssi/date from prod lib ?
-    - need subs too 
-    - conCheck if 
-    - source check - cross check ssi with git ssi 
-    - fail build is not equal 
-    
-  
- cross ref dbb load artifacts by ssi and repo's hash stored in DBB
-
-    test Env:
-        run on mywazi instance 
-        bash 
-        cd /u/ibmuser/waziDBB/dbb-v2/dbb-zappbuild/scripts/utilities
-        ./dbbaudit poc-app-develop ibmuser.pipeline.load
-        use ADO to build to IBMUSER.PIPELINE.LOAD
-        BRANCH  Develop
-        CI AUTOSTART = TRUE   
-       
-        cli ref: https://www.ibm.com/docs/en/dbb/2.0?topic=interface-build-group-commands
-        
-        
-    /u/ibmuser/ibm-ucd/agent/var/work/poc-component/IBMUSER.PIPELINE.LOAD
-    datbatch is there 
-
-    from zfs 
-
-    x=bpxwunix('echo " LISTIDR MEMBER=(DATBATCH.LOAD),OUTPUT=IDENT"  > cntl')
-    amb="amblist  /u/ibmuser/ibm-ucd/agent/var/work/poc-component/IBMUSER.PIPELINE.LOAD < cntl | grep SSI: | cut -c 57-6
-
-
-    from pds 
-    x=bpxwunix('echo " LISTIDR MEMBER=(DEMO),OUTPUT=IDENT"  > cntl')
-    x=bpxwunix('echo " LISTIDR MEMBER=(DEMO2),OUTPUT=IDENT"  >> cntl')
-    x=bpxwunix('echo " LISTIDR MEMBER=(DATBATCH),OUTPUT=IDENT"  >> cntl')
-
-    amb="amblist  ""//''zdev.main.load''""  < cntl | grep SSI: | cut -c 57-64 "
-    clitest     amblist "//'zdev.main.load'" < cntl
-        
-    x=bpxwunix(cli ,,ambo.,ambe.)
-
-    say ambo.1
-    say ambo.2
-    say ambo.3
-    say 'cnt' ambo.0
-
-
-
-
-
-
-
-    it would be nice to pre-check the package pre-deploy by unpacking movde loads to a pds and amb them 
-    for now work on post deploy 
-    in all cases the package has to hit mvs for unpacking ... so what 
-    
-    think of a package as having a sinature
-        package create date?
-        package file counts
-        a hash would be nice 
-        file details 
-        file name, 
-    if load 
-        - load build data and ssi if any 
-        - load size 
-
-    */
 
 /* EOF < 100 lines ??? */ 
  
