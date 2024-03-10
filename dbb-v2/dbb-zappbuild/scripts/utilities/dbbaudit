@@ -1,42 +1,40 @@
 /* rexx dbbAudit v1.5b Full view
 
-    dbbaudit util (nlopez) cross references a packages load-SSI with Git consistency (Endvr CAST-like equivalent)
-    Purpose: An independent audit check of DBB artifacts within a deployable package.
-    Flow:  CI creates and publishes a package of DBB build artifacts which includes the DBBs BuildReport.json. 
-            CD reads the package and:
-                - unpacks tar
-                - extracts DBB BuildReport info (repo, hash, date, buildGroup with its topic/branch)
-                - runs abmlist to extract each csects hash-ssi, build date, and any static module(s).
-                - run a git show on the topic/branch by DBB hash for each repo 
-                - ??? needs all included dependency set files (aka copybook)
-                - assumes 
-                    - all shared code is configured in app-conf (non-cross wire model)
-                    - shared objects like copybooks and static calls have unique names 
+    dbbaudit util (nlopez) cross load mod in a tar and its SSI with Git consistency (Endvr CAST-like equivalent)
+    Purpose: An independent audit check of DBB artifacts within a deployment package. 
 
     pre-req:
-        - build with SSI enabled 
-        - Create packages with PackageBuildOutputs (scripted method used in wazi Deploy - ahs more details)
-        - clone repo(s) in BR to diff... not sure whcih branch the shared repo is at. can use BR rp name for branch name  
+        - SSI enabled in zappbuild 
+        - All shared code is configured in app-conf (non-cross wire model)
+        - Shared objects like copybooks and static calls have unique names 
+        - Create packages with PackageBuildOutputs which includes the DBB Build Report (BR)
+        - Ability to clone repo(s) found in BR for commit hist. BR does not have branch for shared repos  
 
-    Supported Package must include a DBB buildReport(BR) as produce by  
+    Supported Package must include a DBB buildReport(BR) as produced by  
         https://github.com/IBM/dbb/tree/main/Pipeline/PackageBuildOutputs
-    buztool packages are not supported yet (BDBB BuildReport is not included in tar ) 
+    buztool packages are not supported yet (DBB BuildReport is not included in tar ) 
 
     runAs /u/ibmuser/waziDBB/dbb-v2/dbb-zappbuild/scripts/utilities/dbbaudit  
     
     todo 
         wip - cross repo support and tag
         senthil add all source xref like copybooks -requires compiler listing in package (or in dbb meta)    
-        add ucd buztool packaging support package.zip with which has no metadata just art's meta in ucd
-        nelson - add a dirft detecgion phase for extra checking 
-    
+        add ucd buztool packaging support package.zip with which 
 */ 
  
 /* parse arg  packagePath     <- hardcode for testing */
-packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2844/poc-workspace/package.tar'
-packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2852/poc-workspace/package.tar'
-packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2853/poc-workspace/package.tar'
-packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2854/poc-workspace/package.tar'
+
+/* Unit test data section */
+    packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2844/poc-workspace/package.tar'
+    packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2852/poc-workspace/package.tar'
+    
+
+    /* asm test failed - cant find mac depfile??? */ 
+    packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2854/poc-workspace/package.tar'
+
+
+    packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2853/poc-workspace/package.tar'
+/**  end of unit test data section */
 
 if exists(packagePath) = "" then do 
     say "dbbaudit:  ERROR"
@@ -54,7 +52,6 @@ if exists(packagePath) = "" then do
 
     /* cmd = 'ls-l  ../package.tar '  */
     'iconv -f UTF-8 -t IBM-1047 BuildReport.json > BR '
-
 
 /* Read the DBB build report into a stem called line*/     
     x=bpxwunix('cat BR' ,,buildReport.,cmde.)  
@@ -92,7 +89,6 @@ if exists(packagePath) = "" then do
 /* Parse build Report repo refs -  can have one or more repo refs and hash so add to stem */
     sGitRepo. = ""   /* This is a array of repo names to resolve the associate data structure */
     sGitRepo.0 = 0   /* This stem is a data structure to model by repo name  with url and hash elements */
-
 
     /* look for a keyword prefix of :git it can be a repo url or it hash of a repo  */
     line = BuildReport.1 /* refresh the line var */
@@ -145,7 +141,7 @@ if exists(packagePath) = "" then do
             sDepSet.dSetFile.files.0 = 0 
             line = substr(line,px)                                  /* scroll the line  */ 
         
-            /* find all dependancies for the depSet file - like copybooks */
+            /* find all dependencies for the depSet file - like copybooks */
             parse var line xDepSet "]" line 
 
             kwords = cleanStr(xDepSet)   /* convert extra chars to blanks to spin by words */                    
@@ -167,9 +163,9 @@ if exists(packagePath) = "" then do
     end 
 
     /* DOC: sDepSet stem structure:  
-        using a root stem sDepSet.x to travers the structure like an index in a  dict. 
+        using a root stem sDepSet.x to traverse the structure like an index in a  dict. 
         sDepSet.0  is a list of depSet filenames called dSetFile aka this is the tpi of a dbb dep grp and the  main program. 
-        sDepSet.<dSetFile>.files.0 is a list of a depSets dependancies called dFileName.
+        sDepSet.<dSetFile>.files.0 is a list of a depSets dependencies called dFileName.
         sDepSet.<dSetFile>.<dFileName>.cat is the dFileName's category like COPY or LINK.
         example traversing loop below. 
         */
@@ -177,7 +173,7 @@ if exists(packagePath) = "" then do
         /* for each DepSet 
         do x = 1 to sDepSet.0  
             dSetFile = sDepSet.x
-            say 'DepSet Main File <dSetFile>:' dSetFile ' and each of its dependancies:' 
+            say 'DepSet Main File <dSetFile>:' dSetFile ' and each of its dependencies:' 
             do xf = 1 to sDepSet.dSetFile.files.0
                 dFileName = sDepSet.dSetFile.files.xf 
                 dCat =    sDepSet.dSetFile.dFileName.cat
@@ -186,8 +182,7 @@ if exists(packagePath) = "" then do
         end 
         */
 
-
-/* Run AMBLIST on all packaged Load mod into Outputs stem */
+/* Run AMBLIST on all packaged Load mod and append to BR Outputs stem */
     do ox = 1 to outputs.0   
         parse var outputs.ox syslmod "," . 
 
@@ -196,14 +191,19 @@ if exists(packagePath) = "" then do
 
         /* parse amblist sysout and build a stem using the mem name as a var */
         do ax = 1 to ambo.0
-            if pos('MEMBER NAME:',ambo.ax) > 0 then do                          
-                mem = word(ambo.ax, 4 ); parse var mem mem '.' .                        
+        /* say 'amb>' ambo.ax */
+        
+            /* if pos('MEMBER NAME:',ambo.ax) > 0 then do   < cant use for asm loads says **UNIX** ??? */ 
+            if pos('LISTIDR MEMBER=',ambo.ax) > 0 then do 
+                aline=ambo.ax
+                parse var aline . '(' mem '.' .
+                
                 outputs.mem.SSI#  = ''
                 outputs.mem.dDate = '' 
                 outputs.mem.dTime = '' 
-                outputs.mem.subs.0 = 0           
-    
+                outputs.mem.subs.0 = 0         
                 end 
+    
             if pos('MODULE SSI:',ambo.ax) > 0 then
                 outputs.mem.SSI# = word(ambo.ax, 4 ) 
                 
@@ -225,16 +225,15 @@ if exists(packagePath) = "" then do
                     outputs.mem.subs.sx = right(sub,10),
                                 'BuildDate:'right(s_buildDate,16)
                     outputs.mem.subs.0 = sx 
-                end 
+                    end 
                 end 
         end 
     end 
 
-
 /* End of Build Report parsing Phase  ****** */ 
 
 /* Report Phase: Generate the audit report Headings */
-    say 'dbbAudit Started On ' date() 
+    say '****   dbbAudit Started On ' date() '****' 
     say
     say ' Inspecting contents of DBB Package:'
     say '  ' packagePath
@@ -251,18 +250,17 @@ if outputs.0 = 0 then do
     end 
      
 
-/* List source dependancies and related Git history for the main collection (App)  derived from build Group.   
+/* List source dependencies and related Git history for the collection (App)  derived from build Group.   
     Note: 
         -DBB BuildReport does not include the branch for shared repos.  So I cant include them in the git log.          
         -uplift notes: use java or curl to run this as an api on the git host and avoid the clone.
     */
 
-    /* Use the Main collections repoURL to extract a git log per dependancies */
+    /* Use the Main collections repoURL to extract a git log per dependencies */
     do  rx = 1 to sGitRepo.0
         xGitRef = sGitRepo.rx
 
-        if pos(xGitref,buildResultGroup) > 0 then do /* todo: else say not supported */
-        
+        if pos(xGitref,buildResultGroup) > 0 then do /* is this the main app repo ?  */
             /*found the repo of the main buildGroup. Get its branch name. Clone it for gitlog of each depFiles in the depSet */ 
 
             branchPos = lastPos('-',buildResultGroup)
@@ -276,44 +274,30 @@ if outputs.0 = 0 then do
             'rm -rf 'xGitRef
             'git clone  -b ' branch   sGitRepo.xGitRef.url xGitRef '2> gr ' /* dont shallow this as some depFiles may be old */ 
 
-            if sDepSet.0 > 0 then
-                say " Program(s) and thier dependencies used in this build.  Includes Git history as of the above DBB Git Hash:"
-            else 
-                say " No dependencies deteccted by DBB in this package"
-            
-            do dx = 1 to sDepSet.0  
-                dSetFile = sDepSet.dx  /* the main file of a depSet */ 
-                say "   Main:" dSetFile 
+            if sDepSet.0 = 0 then
+                say " No dependencies detected by DBB in this package"
 
-                /* for each depfile in the set, get git info or just show the name */
-                do xf = 1 to sDepSet.dSetFile.files.0
-                    dFileName   = sDepSet.dSetFile.files.xf 
-                    dCat        = sDepSet.dSetFile.dFileName.cat
-                   
-                    if dCat = "COPY" then do                     
-                        /* git log from the DBB build hash to get the latest ver of a depFile avoiding picking up changes after the packaging. */
-                        /* cmd='git -C' xGitRef '-P log -n 1' sGitRepo.xGitRef.hash '--pretty=format:"%h,%ci,%an,%s" --' dFileName                        
-                        x=bpxwunix(cmd ,,glog.,gloge.)                          
-                        */
-                        say getGitLog 
-                        /* if glog.0 >  0 then say getGitLog
-                           
-                            gline = glog.1                        
-                            parse var gline gHash ',' csDate csTime .  ',' anAuthor ',' sMsg 
-                            say '             'dFileName ' Commit:' gHash" Commit Date:"csDate csTime " Commit By:" anAuthor  
-                        end
-                        */  
-                        else 
-                            say '             'dFileName ' <(2) Git branch unknown> ' /* branch is not in the BR */  
-                    end 
+            else do 
+                say " Main Program(s) and their dependencies with Git history as of the above DBB Git Hash:"
+                do dx = 1 to sDepSet.0  
+                    dSetFile = sDepSet.dx  /* the main file of a depSet */ 
+                    say "   Main Pgm:"  getGitLog(dSetFile) 
+
+                    /* for each depfile in the set, get git info or just show the name */
+                    do xf = 1 to sDepSet.dSetFile.files.0
+                        dFileName   = sDepSet.dSetFile.files.xf 
+                        dCat        = sDepSet.dSetFile.dFileName.cat
+                        say '            ' getGitLog(dFileName) 
+                    end
+                    say  
                 end 
             end 
-        end 
-    end 
+        end
+    end  
 /* Done */     
 
-/* LISTLOAD REPORT */
-    say ; say ' Summary of load module artifacts in this package using AMBLIST:'
+/* LISTLOAD AMBLIST REPORT */
+    say ; say ' AMBLIST report of load module in this package:'
 
     do ox = 1 to outputs.0
         parse var outputs.ox syslmod ',' mem . 
@@ -322,12 +306,11 @@ if outputs.0 = 0 then do
             'BuildDate/Time:' outputs.mem.dDate outputs.mem.dTime
         if sx = outputs.mem.subs.0 > 0 then do            
             do sx = 1 to outputs.mem.subs.0
-                say '             Static SubMod:' outputs.mem.subs.sx 
+                say '                 Static Mod:'outputs.mem.subs.sx 
             end 
         end 
-
+        say
     end  
-
 
 
 
@@ -336,14 +319,15 @@ exit
 
 /* procs */
 getGitLog:
-    cmd='git -C' xGitRef '-P log -n 1' sGitRepo.xGitRef.hash '--pretty=format:"%h,%ci,%an,%s" --' dFileName                        
-    x=bpxwunix(cmd ,,glog.,gloge.)                          
+    parse arg fileName
+    cmd='git -C' xGitRef '-P log -n 1' sGitRepo.xGitRef.hash '--pretty=format:"%h,%ci,%an,%s" -- "'fileName'"'                        
+    x=bpxwunix(cmd ,,glog.,gloge.)
     if glog.0 = 0 then 
-        CommitInfo = '<(1) Git Info Not available 'gloge.1'>'
+        CommitInfo = right(fileName,45,'.') ' <Git info not available>'
     else do   
         gline = glog.1                        
         parse var gline gHash ',' csDate csTime .  ',' anAuthor ',' sMsg 
-        CommitInfo= '             'dFileName ' Commit:' gHash" Commit Date:"csDate csTime " Commit By:" anAuthor  
+        CommitInfo= right(fileName,45,'.') ' Commit ID/Date:' gHash" / " csDate csTime /* " Commit By:" anAuthor */  
     end 
     return CommitInfo
 
@@ -375,6 +359,7 @@ cleanStr:
     str  = translate(str,"",'"')
     return str 
 
-
 /* EOF < 100 lines ??? */ 
  
+
+
