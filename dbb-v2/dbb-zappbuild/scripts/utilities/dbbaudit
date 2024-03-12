@@ -1,27 +1,19 @@
-/* rexx   dbbAudit v2.1 (json ver) view  
+/* rexx   dbbAudit v2.1 (IBM DevOps Acceleration Team )
 
-    dbbaudit util (nlopez) cross load mod in a tar and its SSI with Git consistency (Endvr CAST-like equivalent)
-    Purpose: An independent audit check of DBB artifacts within a deployment package. 
+    Desc:    This lists source files and loads module details in a package.tar  
+    Purpose: An independent audit check of DBB artifacts within a pre-production deployment package. 
  
-
     pre-req:
         - SSI enabled in zappbuild fir link phase of all langs 
-        - All shared code is configured in app-conf (non-cross wire model)
-        - Shared objects like copybooks and static calls have unique names 
-        - Create packages with PackageBuildOutputs util which includes the DBB Build Report (BR)
-        - Ability to clone repo(s) found in BR for commit hist. BR does not have branch name for shared repos  
+        - All shared code is configured in app-conf (and in git  
+        - Provide git access to extract source file commit details. This is optional. 
         - Compatible with DBB Build Report API 2.0.0
         
-    Supported Package must include a DBB buildReport(BR) as produced by  
-        https://github.com/IBM/dbb/tree/main/Pipeline/PackageBuildOutputs
-    buztool packages are not supported yet (DBB BuildReport is not included in tar ) 
+        - Supported Package must include a DBB buildReport(BR) as produced by  
+           https://github.com/IBM/dbb/tree/main/Pipeline/PackageBuildOutputs
+        - buztool packages are not supported yet (DBB BuildReport is not included in tar ) 
 
-    runAs /u/ibmuser/waziDBB/dbb-v2/dbb-zappbuild/scripts/utilities/dbbaudit  
-    
-    todo 
-        wip - cross repo support and tag
-        senthil add all source xref like copybooks -requires compiler listing in package (or in dbb meta)    
-        add ucd buztool packaging support package.zip with which 
+    required Arg: Path to the package.tar 
     */ 
  
 /* parse arg  packagePath     <- hardcode for testing */
@@ -45,16 +37,11 @@ if exists(packagePath) = "" then do
     end 
 
 /* Unpack the release package in a tmp folder to examine its contents */
-    /* x=Directory(packagePath) <>"" then do */ 
-
     cmd = 'cd; rm tmp_audit; mkdir tmp_audit; cd tmp_audit; cp packagePath .; pax -rvf ' packagePath      
     x=bpxwunix(cmd ,,cmdo.,cmde.)  
     /* if cmde.0 > 0 then do; say 'Error unpacking with cmd' cmd ; say  cmde.0 ; exit 12 ; end  */
-    x=Directory('tmp_audit') 
-
-    /* cmd = 'ls-l  ../package.tar '  */
+    x=Directory('tmp_auditv2') 
     'iconv -f UTF-8 -t IBM-1047 BuildReport.json > BR '
-
 
 
 /* Read and parse the DBB build report json file */     
@@ -142,16 +129,24 @@ if outputs.0 = 0 then do
         if pos(xGitRef,buildResultGroup) > 0 then do /* is this the main app repo ?  */
             /*found the repo of the main buildGroup. Get its branch name. Clone it for gitlog of each depFiles in the depSet */ 
 
-            branchPos = lastPos('-',buildResultGroup)
-            branch = right(buildResultGroup,branchPos-1)
+            branchPos   = lastPos('-',buildResultGroup)
+            branch      = right(buildResultGroup,branchPos-1)           
+            dbbHash     = left(sGitRepo.xGitRef.hash,7)
+
+            /* get to git info on he build branch */ 
+            gitFailed = 0
+            'rm -rf 'xGitRef
+            cmd='git clone  -b 'branch   sGitRepo.xGitRef.url xGitRef  
+
+            x=bpxwunix(cmd ,,glog.,gcloneErr.)
+            if gcloneErr.0 > 1 then gitFailed = 1  
+
             say '          App Name:' xGitRef 
             say '          App Repo:' sGitRepo.xGitRef.url  
             say '            Branch:' branch               
-            say '    Build Git Hash:' left(sGitRepo.xGitRef.hash,7)
+            say '    Build Git Hash:' left(sGitRepo.xGitRef.hash,7) '<At the time of the build>'
             say        
 
-            'rm -rf 'xGitRef
-            'git clone  -b ' branch   sGitRepo.xGitRef.url xGitRef '2> gr ' /* dont shallow this as some depFiles may be old */ 
 
             if sDepSet.0 = 0 then
                 say " No  DBB dependency sets found.  Review the DBB Build and packaging logs for possible problems with this build."
@@ -171,12 +166,7 @@ if outputs.0 = 0 then do
                         say '            ' getGitLog(dFileName) 
                     end
                     say  
-                end
-                say 
-                say '   **Note: Git commit data is extracted from the App`s repo and branch as-of the DBB Build Git Hash.'
-                say '           Source files with Git HASHES can be equal or later than DBB HASH.' 
-                say '           Git information is not supported for shared repos or static module dependencies.'
-                say  
+                end               
             end 
         end
     end  
@@ -198,8 +188,26 @@ if outputs.0 = 0 then do
         say
     end  
     say 
-    say '   **Note: LoadMod SSI is the DBB Git Hash at the time of the build.' 
-    say '           SSI for statically linked modules is not available in the AMBLIST utility.'    
+    say ' ___________________________________________________________________________________________________________'
+    if gitFailed then do        
+        say '     *Warning: Failed to access Git Repo' sGitRepo.xGitRef.url
+        say '               Source file  Commit details not avialable. Git stderr:'
+        do xgce = 1 to gcloneErr.0; say '                 'gcloneErr.xgce; end 
+        end
+
+        else do
+        say '     A source files commit ID and date is extracted `as-of` the DBB Build Git hash point in time.'
+        say '     They will be equal or later than the DBB hash.' 
+        say '     Git information is currently not supported for shared repos or static module dependencies.'
+        end 
+    
+    say 
+    say '     LoadMod SSI is the commit hash of the applications`s branch at the time of the build. '
+    say '     The commit hash of the source file(s) used to create load(s) is listed in the `Program Summary Section`.'
+    say '     SSI for statically linked modules is not available in the AMBLIST utility.'    
+    
+        
+
 exit 
 
 /****     procs  ****/
@@ -349,15 +357,19 @@ parseJson:
 
 getGitLog:
     parse arg fileName
-    cmd='git -C' xGitRef '-P log -n 1' sGitRepo.xGitRef.hash '--pretty=format:"%h,%ci,%an,%s" -- "'fileName'"'  
-     
-    x=bpxwunix(cmd ,,glog.,gloge.)
-    if glog.0 = 0 then 
-        CommitInfo = right(fileName,45,'.') ' <Git info not available>'
+    if gitFailed  then  
+       CommitInfo = right(fileName,45,'.') ' ' 
     else do   
-        gline = glog.1                        
-        parse var gline gHash ',' csDate csTime .  ',' anAuthor ',' sMsg 
-        CommitInfo= right(fileName,45,'.') ' Git Commit ID/Date:' gHash" / " csDate csTime /* " Commit By:" anAuthor */  
+        cmd='git -C' xGitRef '-P log -n 1' sGitRepo.xGitRef.hash '--pretty=format:"%h,%ci,%an,%s" -- "'fileName'"'  
+        
+        x=bpxwunix(cmd ,,glog.,gloge.)
+        if glog.0 = 0 then 
+            CommitInfo = right(fileName,45,'.') ' <Git info not available>'
+        else do   
+            gline = glog.1                        
+            parse var gline gHash ',' csDate csTime .  ',' anAuthor ',' sMsg 
+            CommitInfo= right(fileName,45,'.') ' Git Commit ID/Date:' gHash" / " csDate csTime /* " Commit By:" anAuthor */  
+        end 
     end 
     return CommitInfo
 
