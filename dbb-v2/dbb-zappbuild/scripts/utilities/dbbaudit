@@ -6,7 +6,8 @@
     pre-req:
         - SSI enabled in zappbuild fir link phase of all langs 
         - All shared code is configured in app-conf (and in git  
-        - Provide git access to extract source file commit details. This is optional. 
+        - Provide git access to extract source file commit details. This is optional.        
+        - For source file commit details, assume the the branch used by DBB exists  
         - Compatible with DBB Build Report API 2.0.0
         
         - Supported Package must include a DBB buildReport(BR) as produced by  
@@ -32,26 +33,41 @@
 
 if exists(packagePath) = "" then do 
     say "dbbaudit:  ERROR"
-    say 'DBB Package not found <' packagePath '<'
+    say '  DBB Package not found <' packagePath '<'
     exit 12
     end 
 
 /* Unpack the release package in a tmp folder to examine its contents */
-    cmd = 'cd; rm tmp_audit; mkdir tmp_audit; cd tmp_audit; cp packagePath .; pax -rvf ' packagePath      
-    x=bpxwunix(cmd ,,cmdo.,cmde.)  
-    /* if cmde.0 > 0 then do; say 'Error unpacking with cmd' cmd ; say  cmde.0 ; exit 12 ; end  */
-    x=Directory('tmp_auditv2') 
-    'iconv -f UTF-8 -t IBM-1047 BuildReport.json > BR '
+    workdir='tmp_dbbauditv4';nul='> /dev/null 2>&1'
+    'cd; rm 'workDir nul'; mkdir 'workDir nul'; cd 'workDir'; cp 'packagePath' .; pax -rvf ' packagePath  nul     
+
+    x=Directory(workDir) 
+    'iconv -f UTF-8 -t IBM-1047 BuildReport.json > dbb_BuildRpt '
 
 
 /* Read and parse the DBB build report json file */     
-    x=bpxwunix('cat BR' ,,buildReport.,cmde.)  
-    line = BuildReport.1 /* its a stream no NL */
-    call parseJson line
-  
+    if exists('BuildReport.json') = "" then do
+        say "dbbaudit:  ERROR - unsupported package format >" packagePath
+        say '  This package is missing the DBB BuildReport.json'
+        say '  Use this utility to package DBB artifacts:'
+        say '    https://github.com/IBM/dbb/tree/main/Pipeline/PackageBuildOutputs' 
+        exit 12
+        end 
+
+    x=bpxwunix('cat dbb_BuildRpt' ,,buildReport.,cmde.)  /* add the BR to a stem asa stream*/
+    call parseJson BuildReport.1                          
+    
+    /* check if output loads found */
+    if outputs.0 = 0 then do
+        say 'dbbaudit: ERROR '
+        say '   No deployable artifacts found in package> ' packagePath
+        say '   Review the DBB build log for details. Exit RC12'
+        exit 12 
+        end 
+     
 
 
-/* Run AMBLIST on all packaged Loadmods and append to BR Outputs stem */
+/* Run AMBLIST on all packaged Loadmods and add tp Outputs stem */
     do ox = 1 to outputs.0   
         parse var outputs.ox syslmod "," . 
 
@@ -98,23 +114,17 @@ if exists(packagePath) = "" then do
 
 /* End of parsing Phase  ****** */ 
 
-/* Report Phase: Generate the audit report Headings */
+
+/* Report Phase: Generate the audit report headings */
     say '****   dbbAudit Started On ' date() '****' 
     say
     say ' Inspecting contents of DBB Package:'
     say '  ' packagePath
     say 
-    say ' DBB Build Summary: '
+    say ' DBB ' dbbVer 'Build Summary: '
     say '   DBB Build Label:' buildResult
     say '      Build  Group:' buildResultGroup
-
-/* improve this  part of the report when no output were found */
-if outputs.0 = 0 then do
-    say "dbbaudit: ERROR"
-    say "   No deployable artifacts found in package. Exit RC12"
-    exit 12 
-    end 
-     
+ 
 
 /* List source dependencies and related Git history for the collection (App)  derived from build Group.   
     Note: 
@@ -130,23 +140,20 @@ if outputs.0 = 0 then do
             /*found the repo of the main buildGroup. Get its branch name. Clone it for gitlog of each depFiles in the depSet */ 
 
             branchPos   = lastPos('-',buildResultGroup)
-            branch      = right(buildResultGroup,branchPos-1)           
+            branch      = right(buildResultGroup,branchPos-1)          
             dbbHash     = left(sGitRepo.xGitRef.hash,7)
 
-            /* get to git info on he build branch */ 
+            /* clone the repo from the build branch */ 
             gitFailed = 0
-            'rm -rf 'xGitRef
+            'rm -rf 'xGitRef  
             cmd='git clone  -b 'branch   sGitRepo.xGitRef.url xGitRef  
-
-            x=bpxwunix(cmd ,,glog.,gcloneErr.)
-            if gcloneErr.0 > 1 then gitFailed = 1  
+            x=bpxwunix(cmd ,,glog.,gcloneErr.); if gcloneErr.0 > 1 then gitFailed = 1  
 
             say '          App Name:' xGitRef 
             say '          App Repo:' sGitRepo.xGitRef.url  
             say '            Branch:' branch               
-            say '    Build Git Hash:' left(sGitRepo.xGitRef.hash,7) '<At the time of the build>'
+            say '    Build Git Hash:' left(sGitRepo.xGitRef.hash,7) '<The branch`s commit ID at the time of the build>'
             say        
-
 
             if sDepSet.0 = 0 then
                 say " No  DBB dependency sets found.  Review the DBB Build and packaging logs for possible problems with this build."
@@ -161,16 +168,14 @@ if outputs.0 = 0 then do
                     /* for each depfile in the set, get git info or just show the name */
                     do xf = 1 to sDepSet.depSetMain.files.0
                         dpTemp  = sDepSet.depSetMain.files.xf
-
-                        parse var dpTemp  dFileName "," dCat 
-                        say '            ' getGitLog(dFileName) 
+                        parse var dpTemp  dFileName "," dCat
+                        say '            ' getGitLog(dFileName, dCat) 
                     end
                     say  
                 end               
             end 
         end
-    end  
-/* Done */     
+    end      
 
 /* LISTLOAD AMBLIST REPORT */
     say ; say ' Load Module Summary: AMBLIST report of load module(s) in this package:'
@@ -191,19 +196,19 @@ if outputs.0 = 0 then do
     say ' ___________________________________________________________________________________________________________'
     if gitFailed then do        
         say '     *Warning: Failed to access Git Repo' sGitRepo.xGitRef.url
-        say '               Source file  Commit details not avialable. Git stderr:'
+        say '               Source file  Commit details not available.'
+        say '               Git stderr:'
         do xgce = 1 to gcloneErr.0; say '                 'gcloneErr.xgce; end 
         end
 
         else do
-        say '     A source files commit ID and date is extracted `as-of` the DBB Build Git hash point in time.'
-        say '     They will be equal or later than the DBB hash.' 
-        say '     Git information is currently not supported for shared repos or static module dependencies.'
+        say '     Source file commit is the version used at the time of the build. '
+        say '     It will be equal or later than the DBB build git hash of the branch.' 
+        say '     Git information is currently not supported for shared repos.'
         end 
     
     say 
-    say '     LoadMod SSI is the commit hash of the applications`s branch at the time of the build. '
-    say '     The commit hash of the source file(s) used to create load(s) is listed in the `Program Summary Section`.'
+    say '     LoadMod SSI is the DBB build Git hash. Use it to trace source version used in the build. '
     say '     SSI for statically linked modules is not available in the AMBLIST utility.'    
     
         
@@ -211,19 +216,17 @@ if outputs.0 = 0 then do
 exit 
 
 /****     procs  ****/
-
-
-parseJson:  
-    /* parse the BR json file into a stems or glb vars for the rtp phase  
-    */ 
+parseJson: /* parse the BR json file into a stems or glb vars for the rtp phase  */ 
     parse arg jStr
+
+    /* pull the version from the header */ 
+    parse var jStr . '"version":"' dbbVer '"' . 
 
     /* skip pass first block "records" */
     parse var jStr . "[" jStr 
- 
    
     /* init glb vars used in th main loop and in the rpt section */ 
-    outputs.0   = 0  
+    outputs.0   = 0                 /* load modules stem */
     buildResult = '' 
     buildResultGroup = ''           /* aka collection with branch as the suffix*/
     sGitRepo.   = ""                /* This is a array of repo names to resolve the associate data structure */
@@ -237,8 +240,9 @@ parseJson:
     blkLevel    = 0                 /* track blk nesting levels */
     startBlkPos = 0                 /* save start of blk */
  
-   
     /* pass 1- Add each json blk to the sBlks. stem */
+
+
     do jx = 1 to length(jStr)   
         jChar = substr(jStr,jx,1)
         
@@ -264,16 +268,16 @@ parseJson:
             DEPENDENCY_SET  - dependencies 
      */       
 
-    /* pass 2- Spin thru the blks stem looking for above json type */ 
+    /* pass 2- navigate the json types */ 
     do sBx = 1 to sBlks.0 
         blk = sBlks.sBx
 
         /* Singleton Section - for blks with only one instance just define glb vars */ 
         if pos('"type":"BUILD_RESULT"',blk) > 0  then do           
             /* only one instance of these keywords so parse is simple */
-            parse var blk .    'label":"'   buildResult '"' .
-            parse var blk .    'group":"'   buildResultGroup '"' . 
-        end 
+            parse var blk .    'label":"'       buildResult '"' .
+            parse var blk .    'group":"'       buildResultGroup '"' .            
+            end 
 
         if pos('"type":"PROPERTIES"',blk) > 0 then do /* Get App repo(s) data */ 
             do while length(blk) > 1
@@ -305,7 +309,7 @@ parseJson:
 
 
         /* Multi Blks Section - create a stem to hold repeating blks like output loads and depSets */ 
-        if pos('"type":"EXECUTE"',blk) > 0 then do  /* output loads */            
+        if pos('"type":"EXECUTE"',blk) > 0 then do  /* output loads */    
             do while length(blk) > 1
                 px = pos('"outputs":',blk)
 
@@ -324,6 +328,7 @@ parseJson:
             end
         end           
             /* diag 
+            say outputs.0 "<<" 
             do ox = 1 to outputs.0; say 'out' outputs.ox ; end
             */ 
 
@@ -356,7 +361,7 @@ parseJson:
     return  
 
 getGitLog:
-    parse arg fileName
+    parse arg fileName, dCat
     if gitFailed  then  
        CommitInfo = right(fileName,45,'.') ' ' 
     else do   
@@ -364,11 +369,12 @@ getGitLog:
         
         x=bpxwunix(cmd ,,glog.,gloge.)
         if glog.0 = 0 then 
-            CommitInfo = right(fileName,45,'.') ' <Git info not available>'
+            CommitInfo = left(dCat,8) right(fileName,45,'.') ' <Git info not available>'
+            if dCat = 'LINK' then CommitInfo = left(dCat,8) right(fileName,45,'.')
         else do   
             gline = glog.1                        
             parse var gline gHash ',' csDate csTime .  ',' anAuthor ',' sMsg 
-            CommitInfo= right(fileName,45,'.') ' Git Commit ID/Date:' gHash" / " csDate csTime /* " Commit By:" anAuthor */  
+            CommitInfo= left(dCat,8) right(fileName,45,'.') 'Git Commit ID/Date:' gHash" / " csDate csTime /* " Commit By:" anAuthor */  
         end 
     end 
     return CommitInfo
@@ -384,16 +390,6 @@ cleanStr:
     str  = translate(str,"",'"')
     return str 
 
-
-dep_getLastValue: 
-    parse arg  iStr, kw
-    lpx  = lastpos(kw,iStr)  
-    sStr = substr(iStr,lpx)
-    
-    parse var sStr  . ':"' sStr  '"' .
-    sStr = cleanFileName(sStr)
-    /* no built in replace char so do this to remove the \ */
-    return sStr 
 
 cleanFileName: /* remove slash in path of file or url */
     parse arg iStr
