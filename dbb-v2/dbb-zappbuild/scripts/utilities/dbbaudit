@@ -365,18 +365,19 @@ getGitLog:
     if gitFailed  then  
        CommitInfo = right(fileName,45,'.') ' ' 
     else do   
-        cmd='git -C' xGitRef '-P log -n 1' sGitRepo.xGitRef.hash '--pretty=format:"%h,%ci,%an,%s" -- "'fileName'"'  
-        
-        x=bpxwunix(cmd ,,glog.,gloge.)
-        if glog.0 = 0 then 
-            CommitInfo = left(dCat,8) right(fileName,45,'.') ' <Git info not available>'
+        cmd='git -C' xGitRef '-P log -n 1' sGitRepo.xGitRef.hash '--pretty=format:"%h,%ci,%an,%s" -- "'fileName'"'           
+        x=bpxwunix(cmd ,,glog.,gloge.) 
+
+        if glog.0 = 0 then do
+            CommitInfo = left(dCat,8) right(fileName,45,'.') '...<Git info not available>'
             if dCat = 'LINK' then CommitInfo = left(dCat,8) right(fileName,45,'.')
+            end 
         else do   
             gline = glog.1                        
             parse var gline gHash ',' csDate csTime .  ',' anAuthor ',' sMsg 
-            CommitInfo= left(dCat,8) right(fileName,45,'.') 'Git Commit ID/Date:' gHash" / " csDate csTime /* " Commit By:" anAuthor */  
+            CommitInfo= left(dCat,8) right(fileName,45,'.') '...<Git Commit ID/Date:' gHash" / " csDate csTime'>'/* " Commit By:" anAuthor */  
+            end 
         end 
-    end 
     return CommitInfo
 
 cleanStr: 
