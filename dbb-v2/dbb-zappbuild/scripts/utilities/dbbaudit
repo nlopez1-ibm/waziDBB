@@ -1,17 +1,15 @@
-/* rexx dbbAudit v2.0 (new json parse ver) 
+/* rexx   dbbAudit v2.1 (json ver) view  
 
     dbbaudit util (nlopez) cross load mod in a tar and its SSI with Git consistency (Endvr CAST-like equivalent)
     Purpose: An independent audit check of DBB artifacts within a deployment package. 
-todo ran into an issue with json depset and not depfile - broke my compex parseing code 
-hard to retri fit so have fun writing a json  parser will make this so much easier 
-
+ 
 
     pre-req:
-        - SSI enabled in zappbuild 
+        - SSI enabled in zappbuild fir link phase of all langs 
         - All shared code is configured in app-conf (non-cross wire model)
         - Shared objects like copybooks and static calls have unique names 
-        - Create packages with PackageBuildOutputs which includes the DBB Build Report (BR)
-        - Ability to clone repo(s) found in BR for commit hist. BR does not have branch for shared repos  
+        - Create packages with PackageBuildOutputs util which includes the DBB Build Report (BR)
+        - Ability to clone repo(s) found in BR for commit hist. BR does not have branch name for shared repos  
         - Compatible with DBB Build Report API 2.0.0
         
     Supported Package must include a DBB buildReport(BR) as produced by  
@@ -24,7 +22,7 @@ hard to retri fit so have fun writing a json  parser will make this so much easi
         wip - cross repo support and tag
         senthil add all source xref like copybooks -requires compiler listing in package (or in dbb meta)    
         add ucd buztool packaging support package.zip with which 
-*/ 
+    */ 
  
 /* parse arg  packagePath     <- hardcode for testing */
 
@@ -59,14 +57,9 @@ if exists(packagePath) = "" then do
 
 
 
-/* Read the DBB build report into a stem called line*/     
+/* Read and parse the DBB build report json file */     
     x=bpxwunix('cat BR' ,,buildReport.,cmde.)  
     line = BuildReport.1 /* its a stream no NL */
-
-
-
-
-/* new json parse test area */ 
     call parseJson line
   
 
@@ -164,39 +157,24 @@ if outputs.0 = 0 then do
                 say " No  DBB dependency sets found.  Review the DBB Build and packaging logs for possible problems with this build."
 
             else do 
-                say " Source Code Summary: Programs(s) and dependencies used in this build:"
-
-                /* DIAG 
-                
-                     dx=sDepSet.0+1;  sDepSet.0=dx; sDepSet.dx=depSetMain      /* save main pgm filename aka detSet in the */  
-                    sDepSet.depSetMain.files.0 = 0                            /* a sub stem under the main for its depFiles */ 
-                    end 
-                else do
-                    parse var blk '"category":"' catKW '",' blk              /* get the depFils cat */                     
-                 
-                    xf = sDepSet.depSetMain.files.0+1
-                    sDepSet.depSetMain.files.0  = xf
-                    sDepSet.depSetFile.files.xf = file","catKW               /* append to file  */
-                    say sDepSet.depSetFile.files.xf             
-                end  
-                
-                */
-
-                
+                say " Source Code Summary: Programs(s) and dependencies used to create load modules in this package:"
+               
                 do dx = 1 to sDepSet.0  
-                    depSetFile = sDepSet.dx  /* the main file of a depSet */ 
+                    depSetMain = sDepSet.dx                         /* the main file of a depSet */ 
                     say "   Main Pgm:"  getGitLog(depSetMain) 
 
                     /* for each depfile in the set, get git info or just show the name */
                     do xf = 1 to sDepSet.depSetMain.files.0
-                        dpTemp  = sDepSet.depSetMain.files.xf 
+                        dpTemp  = sDepSet.depSetMain.files.xf
+
                         parse var dpTemp  dFileName "," dCat 
                         say '            ' getGitLog(dFileName) 
                     end
                     say  
                 end
                 say 
-                say '   **Note: Git commit data is extracted from the DBB App`s repo and branch as-of the DBB Build Git Hash.' 
+                say '   **Note: Git commit data is extracted from the App`s repo and branch as-of the DBB Build Git Hash.'
+                say '           Source files with Git HASHES can be equal or later than DBB HASH.' 
                 say '           Git information is not supported for shared repos or static module dependencies.'
                 say  
             end 
@@ -221,8 +199,6 @@ if outputs.0 = 0 then do
     end  
     say 
     say '   **Note: LoadMod SSI is the DBB Git Hash at the time of the build.' 
-    say '           Its the Git starting point of the source code used to create the Load(s) for this Impact build.'
-    say '           A LoadMod can be created from source files of varying commit points.' 
     say '           SSI for statically linked modules is not available in the AMBLIST utility.'    
 exit 
 
@@ -344,20 +320,13 @@ parseJson:
             */ 
 
         if pos('"type":"DEPENDENCY_SET"',blk) > 0 then do  /* DepSets of copybooks and static stuff for a main pgm */                  
-            say ">>" blk "<<"
-            say 
-             
             onOne       = 1
             depSetMain  = ""
             do while length(blk) > 1  /* bug picking up null in parse */ 
                 file = '' 
                 parse var blk '"file":"' file '",' blk
 
-                if length(file) < 2 then do 
-                    blk = ''
-                    iterate 
-                end 
- 
+                if length(file) < 2 then do; blk = ''; iterate; end 
                 file = cleanFileName(file) 
 
                 if onOne then do
@@ -371,9 +340,8 @@ parseJson:
                  
                     xf = sDepSet.depSetMain.files.0+1
                     sDepSet.depSetMain.files.0  = xf
-                    sDepSet.depSetFile.files.xf = file","catKW               /* append to file  */
-                    say sDepSet.depSetFile.files.xf             
-                end  
+                    sDepSet.depSetMain.files.xf = file","catKW               /* append to file  */
+                    end  
             end  
         end 
     end /* main do */
@@ -393,13 +361,6 @@ getGitLog:
     end 
     return CommitInfo
 
-cleanFileName: /* remove slash in path of file or url */
-    parse arg iStr
-    l=""
-    cFileName = translate(iStr,"","\")                              /* makes it a blank */
-    do cfw = 1 to words(cFileName); l=l""word(cFileName,cfw); end     /* remove blank */
-    return l 
-
 cleanStr: 
     parse arg str 
     str  = translate(str,"",":")
@@ -411,7 +372,8 @@ cleanStr:
     str  = translate(str,"",'"')
     return str 
 
-getLastValue: 
+
+dep_getLastValue: 
     parse arg  iStr, kw
     lpx  = lastpos(kw,iStr)  
     sStr = substr(iStr,lpx)
@@ -421,132 +383,11 @@ getLastValue:
     /* no built in replace char so do this to remove the \ */
     return sStr 
 
-/* EOF < 100 lines ??? */ 
- 
+cleanFileName: /* remove slash in path of file or url */
+    parse arg iStr
+    l=""
+    cFileName = translate(iStr,"","\")                              /* makes it a blank */
+    do cfw = 1 to words(cFileName); l=l""word(cFileName,cfw); end     /* remove blank */
+    return l 
 
-/*  HOLD OLD */
-
-
-    /* Parse type "EXECUTE - get the "outputs" load mods and convert to AMBLIST Control Cards */
-        outputs.0 = 0 
-        do while length(line) > 1
-            px = pos('"outputs":',line)
-
-            /* for each artifact (assumes only loads for now) generate an AMBLIST Control Card */
-            if px > 0 then do        
-                line = substr(line,px)
-                parse var line . 'dataset":"' syslmod '(' mem ')"' line
-                ox = outputs.0 + 1; outputs.ox = syslmod',' mem; outputs.0 = ox 
-
-                if ox = 1 then 
-                    'echo " LISTIDR MEMBER=('mem'.LOAD),OUTPUT=ALL"  > cntl '
-                else 
-                    'echo " LISTIDR MEMBER=('mem'.LOAD),OUTPUT=ALL"  >> cntl '
-            end     
-            else line =''
-        end 
-
-
-    /* Parse type "PROPERTIES"  - repo refs -  can have one or more repo refs and hash so add to stem */
-        sGitRepo. = ""   /* This is a array of repo names to resolve the associate data structure */
-        sGitRepo.0 = 0   /* This stem is a data structure to model by repo name  with url and hash elements */
-
-        /* look for a keyword prefix of :git it can be a repo url or it hash of a repo  */
-        line = BuildReport.1 /* refresh the line var */
-        do while length(line) > 1
-            px = pos('":git',line) 
-            if px > 0 then do        
-                line = substr(line,px)            
-                parse var line . ':' xKw ":" xGitRef '":' xGitValue "," line
-                xGitValue = cleanFileName(xGitValue) 
-                if sGitRepo.xGitRef = "" then   do
-
-                    rx = sGitRepo.0+1; sGitRepo.rx = xGitRef; sGitRepo.0 = rx
-                    sGitRepo.xGitRef = 'added' 
-                    end 
-
-                if xKw = 'giturl' then do   
-                    sGitRepo.xGitRef.url = cleanFileName(xGitValue)
-
-                    end 
-                else do
-                    sGitRepo.xGitRef.hash = strip(cleanStr(xGitValue))
-                    end 
-            end
-            else line =''
-        end
-        /* trace 
-        do  rx = 1 to sGitRepo.0
-            xGitRef = sGitRepo.rx
-            say xGitRef  'url '   sGitRepo.xGitRef.url  sGitRepo.xGitRef.hash  
-        end 
-        */ 
-
-    /* Parse type "DEPENDENCY_SET" to pull dependencySets.  
-    Scroll thru the BuildReport finding key value pairs  */
-        sDepSet.    = ''                    /* use a stem */ 
-        sDepSet.0   = 0                     /* Like a dict where 0 is the index */ 
-        line        = BuildReport.1         /* refresh the line var */
-        ds_KW       = '"dependencySet":['
-
-    /* BROKEN does not work of depset with 0 dep like datxcics !!! */
-
-
-
-        do while length(line) > 1
-            /* px is the current depSet position. Split the line from px to create a head portion.
-            At the end of that head is the depSets source filename.   
-            Pushing rexx to parse complex json is not a good idea - but ok for prototyping. 
-            */   
-            px = pos(ds_KW,line)
-            if px > 0 then do 
-                /* new depSet - get the filename of this depSet */ 
-                dSetFile = GetLastValue(substr(line,1,px), "file")      /* scan from head to cur end pos for kw*/       
-                dx=sDepSet.0+1;  sDepSet.0=dx; sDepSet.dx=dSetFile      /* save depSets filename */  
-                sDepSet.dSetFile.files.0 = 0 
-                line = substr(line,px)                                  /* scroll the line  */ 
-            
-                /* find all dependencies for the depSet file - like copybooks */
-                
-                /* break the str by the depSet block */
-                /* parse var line xDepSet "]" line */
-                /* parse var line xDepSet "}," line */
-
-                kwords = cleanStr(xDepSet)   /* convert extra chars to blanks to spin by words */                    
-                do w = 1 to words(kwords)
-                    if word(kwords,w) = "file" then do  /* pull the file names */
-                        xf = sDepSet.dSetFile.files.0+1; sDepSet.dSetFile.files.0 = xf
-                        dFileName = cleanFileName(word(kwords,w+1))
-                        sDepSet.dSetFile.files.xf = dFileName   
-                    end 
-
-                    if word(kwords,w) = "category" then do 
-                        /* assume cat is always after the last dFileName */
-                        sDepSet.dSetFile.dFileName.cat  = word(kwords,w+1)
-                    end   
-                end 
-            end 
-            else 
-                line = ""
-        end 
-
-        /* DOC: sDepSet stem structure:  
-            using a root stem sDepSet.x to traverse the structure like an index in a  dict. 
-            sDepSet.0  is a list of depSet filenames called dSetFile aka this is the tpi of a dbb dep grp and the  main program. 
-            sDepSet.<dSetFile>.files.0 is a list of a depSets dependencies called dFileName.
-            sDepSet.<dSetFile>.<dFileName>.cat is the dFileName's category like COPY or LINK.
-            example traversing loop below. 
-            */
-
-            /* for each DepSet 
-            do x = 1 to sDepSet.0  
-                dSetFile = sDepSet.x
-                say 'DepSet Main File <dSetFile>:' dSetFile ' and each of its dependencies:' 
-                do xf = 1 to sDepSet.dSetFile.files.0
-                    dFileName = sDepSet.dSetFile.files.xf 
-                    dCat =    sDepSet.dSetFile.dFileName.cat
-                    say 'Dependency ' dFileName dCat  
-                end 
-            end 
-            */
-
+/* rexx eof - end script with one new line. make sure to use lf not crlf  */
