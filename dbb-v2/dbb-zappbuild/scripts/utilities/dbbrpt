@@ -1,19 +1,30 @@
 /* rexx dbbrpt util (nlopez beta 1)
    Summarizes metadata for all collections in a MetaStore.
-   Add dbb hash of last BR
+   Enhancement:
+    - allow user to pass an arg (expandSeq) to exapnd a collection and its last BR by the seq assigned in the min rpt   
+      Args examples: 
+        - dbbrpt       - no arg. Generte the default summary report  
+        - dbbrpt XXX   - XXX is the seq num of a col0lction from the default report   
   
+
+
 ref: https://www.ibm.com/docs/en/dbb/2.0?topic=interface-collection-commands 
 */
+parse arg expandSeq 
+
 call init
 
 main:    
     /* Get all collections and catch any metadata access error. */
     dbbcli = 'dbb collection list ' metaType
-
     gc=bpxwunix(dbbcli ,,collections.,ce.)       
     if ce.0 > 0 then call errOut 
     
-    say h1 h2 h3 h4
+    if expandSeq ='' then  say h1 h2 h3 h4
+    
+    collSeq    = 1
+    coll.      = ''
+    bRpt.      = ''
 
     do cx = 5 to collections.0   
         collection_name = collections.cx; tot_colls=tot_colls+1
@@ -26,13 +37,13 @@ main:
         collection_fileCnt = word(fileCnt,3)
 
         /* Get a collections Build Group  */
-        build_count = ''
-        last_build_date = '' 
-        last_build_Status= ''
-        Last_build_info=''
-        git_url = ''
-        git_hash = '' 
-
+        build_count         = ''
+        last_build_date     = '' 
+        last_build_Status   = ''
+        Last_build_info     =''
+        git_url     = ''
+        git_hash    = '' 
+       
         if right(collection_name,7) <> 'outputs' then do 
             tot_sLG=collection_fileCnt+tot_sLG
             dbbcli = 'dbb build-group view ' collection_name metaType 
@@ -48,61 +59,125 @@ main:
                 last_build_date = word(last_build.7,2)
                 last_build_date = getKeyValue('label:') 
                 gitHash = getKeyValue(':githash:') /* one repo only*/           
-                Last_build_info=last_build_date",Hash:"left(strip(gitHash),7)
+                Last_build_info=last_build_date","left(strip(gitHash),7)
 
+                bRpt.collSeq = last_build_date
+  
             end 
         end
-        else tot_oLG=collection_fileCnt+tot_oLG
+        else  
+            tot_oLG=collection_fileCnt+tot_oLG
 
-        /* print collection summary */
-        say left(' 'collection_name,40,.),
-            left(collection_fileCnt,15),
-            left(build_count,15),            
-            last_build_info
+
+        /* if not in expand runmode, print collection summary   */
+        if expandSeq ='' then do 
+            say left(right(collSeq,3)  collection_name,43,.),
+                left(collection_fileCnt,15),
+                left(build_count,15),            
+                last_build_info
+        end     
+        /* build mini dict for expand function */
+        coll.collSeq = collection_name
+        collSeq = collSeq + 1     
     end
 
-    say; say '***'
-    say 'Total Applications under DBB =' tot_colls/2 
-    say 'Total Source Logical Files   =' tot_sLG
-    say 'Total Output Logical Files   =' tot_oLG
-    say 'Total Build Results          =' tot_br
 
+    /* Expanded details requested */
+    if expandSeq /='' then do 
+        say 
+        say '** Expanding Collection and dependencies for: ' coll.expandSeq 
+      
+        dbbcli = 'dbb collection view ' coll.expandSeq metaType
+        gc=bpxwunix(dbbcli ,,expColl.,xce.)       
+        if xce.0 > 0 then call errOut 
+    
+        do xColl = 18 to expColl.0 
+            parse var expColl.xColl lFile fileName 
+
+            lFile = strip(lFile)
+            fileName = strip(fileName)
+
+
+            /* look for depends  in the main collection */
+            dbbcli="dbb logical-file view  --collection " coll.expandSeq "'"fileName"'"  metaType
+
+
+            gc=bpxwunix(dbbcli ,,expCollDep.,xce.)       
+            if xce.0 > 0 then do
+                /* maybe a mal-formed file names with spaces */ 
+                say '   !ERROR: Skipping Unsupported fileName <'fileName'>'  
+                expCollDep.0 = 0 
+            end 
+            else do
+                parse var expCollDep.17 . . depCnt 
+                say '   LogicalFile:' left(lFile,12) left(fileName,60,.)  " Dependency Cnt:" depCnt  
+
+                do xCollDep = 21 to expCollDep.0
+                    say '                                 Dep:' xCollDep-20 ' ' expCollDep.xCollDep
+                end
+            end 
+        end 
+
+        /* Dump the build report for non-outputs collection */
+        if bRpt.expandSeq /='' then do  
+            say; say; say  
+            say '___________________________________________________________________________________'
+            say '** Expanding Lastest BuildReport:  ' bRpt.expandSeq      
+            /*say 'dbb build-result view ' bRpt.expandSeq '--build-group' coll.expandSeq metaType 
+
+            'dbb build-result export '  bRpt.expandSeq  ' --build-group ' coll.expandSeq ' --directory . '  metaType  
+           
+           */ 
+
+           'dbbaudit $PWD/build-results/'coll.expandSeq'/'bRpt.expandSeq'/attachments/BuildReport.json'
+         end 
+
+    end 
+    else do
+        say; say '***'
+        say 'Total Applications under DBB =' tot_colls/2 
+        say 'Total Source Logical Files   =' tot_sLG
+        say 'Total Output Logical Files   =' tot_oLG
+        say 'Total Build Results          =' tot_br
+    end 
 
     /* provide some notes */
-    say; say '***'; say 'Notes:'; 
-    say 'Applications are scanned by DBB and dependency information',
-    'stored as Logical Files across two collections.',
-    'One collection has source files. '
-    say 'The other, ending in `outputs`,',
-    'stores link-edit dependency information like static module names.'
-    
-    say ; say 'Build Results are the number of reports grouped by',
-    'application source collection name.'
-    say 'Use that name in the dbbprune utility to delete old reports.'
+    if expandSeq = '' then do 
+        say; say '***'; say 'Notes:'; 
+        say 'Application files are scanned by DBB and dependency information is',
+        'stored as Logical Files in two collections.',
+        'One collection holds metadata for source files and dependency to copybooks of other files. The other, ending in `outputs`,',
+        'has dependency information on static modules.'
+        
+        say ; say 'The Build Results cnt shows the number of reports stored for each source collection.'
 
+        say; say '! Use a collection`s SEQ # to expand a source or outputs collection details. For example, ',
+                 ' "dbbrpt 2" would expand the second collection in this  suammry rpt.' 
 
-    say; say 'Refer to the latest DBB doc for other useful cli cmds:'
-
- say "  https://www.ibm.com/docs/en/dbb/2.0?topic=metadata-store-command-line-interface"
+        say; say 'Refer to the latest DBB doc for other useful cli cmds:'
+        say "  https://www.ibm.com/docs/en/dbb/2.0?topic=metadata-store-command-line-interface"
+    end 
  say '***'
 
 exit 
 
 
 init:  
-    h1=left('App Collections (Build Group)',40,'_')
-    h2=left('Logical Files',15,'_')
-    h3=left('Build Results',15,'_')
-    h4='Last Successful Build Label,GitHash'
+    h1=left('SEQ Collections_(Build_Group)',43,'_')
+    h2=left('Logical_Files',15,'_')
+    h3=left('Build_Results',15,'_')
+    h4='Last_Successful_Build_Label,GitHash'
     
     tot_colls=0
     tot_sLG=0
     tot_oLG=0
     tot_br=0
 
+    'clear'
     metaType = '-t file'  /* can be db2- see DBB doc for details */ 
     say '*** DBB App Summary Report         (dbbrpt.rexx) Date:' date('S') '***'
-    say '    Using DBB cli with a hardcoded MetaDataStore('metaType')'
+    say '    Using DBB cli with a hardcoded MetaDataStore('metaType')  '
+    if expandSeq /= '' then say '    **Arg Passed. Expanding details for collection SEQ#' expandSeq
     say ' '
 return 
 

@@ -14,23 +14,36 @@
            https://github.com/IBM/dbb/tree/main/Pipeline/PackageBuildOutputs
         - buztool packages are not supported yet (DBB BuildReport is not included in tar ) 
 
-    required Arg: Path to the package.tar 
+    required Arg: 
+        packagePath  - Path to a package.tar or 
+                     - Path to buildReport.json
     */ 
- 
-/* parse arg  packagePath     <- hardcode for testing */
+  
+parse arg  packagePath  /*     <- hardcode for testing   */
+auditType = 'full'
+if right(packagePath,5) = '.json' then do 
+    auditType = 'sourceOnly'
+    end
 
-/* Unit test data section */
-    packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2844/poc-workspace/package.tar'
-    packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2852/poc-workspace/package.tar'
+if packagePath = '' then do  
+    packagePath='/u/ibmuser/tmp/dbbaudit-test-package.tar' 
+    say 'No Args passed: In TEST mode for hardcoded package: '
+    say '    ' packagePath
+    end 
+     
+
+if auditType /='full' then do 
+    say 'Listing Build rpt from' packagePath 
     
+    gc=bpxwunix('dirname'  packagePath,,uo.,ue.)  /* get the base    */
+    packageDir = uo.1 
+    x=Directory(packageDir) 
 
-    /* asm test failed - cant find mac depfile??? */ 
-    packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2854/poc-workspace/package.tar'
+      
+    'iconv -f UTF-8 -t IBM-1047 BuildReport.json > dbb_BuildRpt '
+    end 
 
-
-    packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2853/poc-workspace/package.tar'
-/**  end of unit test data section */
-
+/* mainline */ 
 if exists(packagePath) = "" then do 
     say "dbbaudit:  ERROR"
     say '  DBB Package not found <' packagePath '<'
@@ -38,12 +51,13 @@ if exists(packagePath) = "" then do
     end 
 
 /* Unpack the release package in a tmp folder to examine its contents */
-    workdir='tmp_dbbauditv4';nul='> /dev/null 2>&1'
-    'cd; rm 'workDir nul'; mkdir 'workDir nul'; cd 'workDir'; cp 'packagePath' .; pax -rvf ' packagePath  nul     
+    if auditType = 'full' then do 
+        workdir='tmp_dbbauditv4';nul='> /dev/null 2>&1'
+        'cd; rm 'workDir nul'; mkdir 'workDir nul'; cd 'workDir'; cp 'packagePath' .; pax -rvf ' packagePath  nul     
 
-    x=Directory(workDir) 
-    'iconv -f UTF-8 -t IBM-1047 BuildReport.json > dbb_BuildRpt '
-
+        x=Directory(workDir) 
+        'iconv -f UTF-8 -t IBM-1047 BuildReport.json > dbb_BuildRpt '
+    end 
 
 /* Read and parse the DBB build report json file */     
     if exists('BuildReport.json') = "" then do
@@ -68,47 +82,49 @@ if exists(packagePath) = "" then do
 
 
 /* Run AMBLIST on all packaged Loadmods and add tp Outputs stem */
-    do ox = 1 to outputs.0   
-        parse var outputs.ox syslmod "," . 
+    if auditType = 'full' then do 
+        do ox = 1 to outputs.0   
+            parse var outputs.ox syslmod "," . 
 
-        cmd='amblist  'syslmod ' < cntl '         
-        x=bpxwunix(cmd ,,ambo.,ambe.)
+            cmd='amblist  'syslmod ' < cntl '         
+            x=bpxwunix(cmd ,,ambo.,ambe.)
 
-        /* parse amblist sysout and build a stem using the mem name as a var */
-        do ax = 1 to ambo.0
-        /* say 'amb>' ambo.ax */
-        
-            /* if pos('MEMBER NAME:',ambo.ax) > 0 then do   < cant use for asm loads says **UNIX** ??? */ 
-            if pos('LISTIDR MEMBER=',ambo.ax) > 0 then do 
-                aline=ambo.ax
-                parse var aline . '(' mem '.' .
-                
-                outputs.mem.SSI#  = ''
-                outputs.mem.dDate = '' 
-                outputs.mem.dTime = '' 
-                outputs.mem.subs.0 = 0         
-                end 
-    
-            if pos('MODULE SSI:',ambo.ax) > 0 then
-                outputs.mem.SSI# = word(ambo.ax, 4 ) 
-                
-    
-            if pos('THIS PROGRAM OBJECT WAS ORIGINALLY',ambo.ax) > 0 then do
-                outputs.mem.dDate = word(ambo.ax, 13 ) 
-                outputs.mem.dTime   = word(ambo.ax, 15 ) 
-                end 
-            if word(ambo.ax,1) = 'CSECT:' then do 
-                sub=word(ambo.ax,2)             
-
-                if left(sub,3) = 'CEE' | left(sub,3) = 'IGZ' | sub=mem then 
-                    skip=skip 
-                else do
-                    sx = outputs.mem.subs.0; sx = sx + 1; axx = ax +1
-                    s_buildDate = word(ambo.axx,4)
-                    outputs.mem.subs.sx = right(sub,9) 'BuildDate:'right(s_buildDate,16)
-                    outputs.mem.subs.0 = sx 
+            /* parse amblist sysout and build a stem using the mem name as a var */
+            do ax = 1 to ambo.0
+            /* say 'amb>' ambo.ax */
+            
+                /* if pos('MEMBER NAME:',ambo.ax) > 0 then do   < cant use for asm loads says **UNIX** ??? */ 
+                if pos('LISTIDR MEMBER=',ambo.ax) > 0 then do 
+                    aline=ambo.ax
+                    parse var aline . '(' mem '.' .
+                    
+                    outputs.mem.SSI#  = ''
+                    outputs.mem.dDate = '' 
+                    outputs.mem.dTime = '' 
+                    outputs.mem.subs.0 = 0         
                     end 
-                end 
+        
+                if pos('MODULE SSI:',ambo.ax) > 0 then
+                    outputs.mem.SSI# = word(ambo.ax, 4 ) 
+                    
+        
+                if pos('THIS PROGRAM OBJECT WAS ORIGINALLY',ambo.ax) > 0 then do
+                    outputs.mem.dDate = word(ambo.ax, 13 ) 
+                    outputs.mem.dTime   = word(ambo.ax, 15 ) 
+                    end 
+                if word(ambo.ax,1) = 'CSECT:' then do 
+                    sub=word(ambo.ax,2)             
+
+                    if left(sub,3) = 'CEE' | left(sub,3) = 'IGZ' | sub=mem then 
+                        skip=skip 
+                    else do
+                        sx = outputs.mem.subs.0; sx = sx + 1; axx = ax +1
+                        s_buildDate = word(ambo.axx,4)
+                        outputs.mem.subs.sx = right(sub,9) 'BuildDate:'right(s_buildDate,16)
+                        outputs.mem.subs.0 = sx 
+                        end 
+                    end 
+            end 
         end 
     end 
 
@@ -118,7 +134,7 @@ if exists(packagePath) = "" then do
 /* Report Phase: Generate the audit report headings */
     say '****   dbbAudit Started On ' date() '****' 
     say
-    say ' Inspecting contents of DBB Package:'
+    say ' Inspecting contents of:'
     say '  ' packagePath
     say 
     say ' DBB ' dbbVer 'Build Summary: '
@@ -178,42 +194,43 @@ if exists(packagePath) = "" then do
     end      
 
 /* LISTLOAD AMBLIST REPORT */
-    say ; say ' Load Module Summary: AMBLIST report of load module(s) in this package:'
+    if auditType = 'full' then do 
+        say ; say ' Load Module Summary: AMBLIST report of load module(s) in this package:'
 
-    do ox = 1 to outputs.0
-        parse var outputs.ox syslmod ',' mem . 
-        say '   LoadMod: ' LEFT(mem,10),
-            'SSI: ' left(outputs.mem.SSI#,7), 
-            'BuildDate/Time:' outputs.mem.dDate outputs.mem.dTime
-        if sx = outputs.mem.subs.0 > 0 then do            
-            do sx = 1 to outputs.mem.subs.0
-                say '                 Static Mod:'outputs.mem.subs.sx 
+        do ox = 1 to outputs.0
+            parse var outputs.ox syslmod ',' mem . 
+            say '   LoadMod: ' LEFT(mem,10),
+                'SSI: ' left(outputs.mem.SSI#,7), 
+                'BuildDate/Time:' outputs.mem.dDate outputs.mem.dTime
+            if sx = outputs.mem.subs.0 > 0 then do            
+                do sx = 1 to outputs.mem.subs.0
+                    say '                 Static Mod:'outputs.mem.subs.sx 
+                end 
             end 
-        end 
-        say
-    end  
-    say 
-    say ' ___________________________________________________________________________________________________________'
-    if gitFailed then do        
-        say '     *Warning: Failed to access Git Repo' sGitRepo.xGitRef.url
-        say '               Source file  Commit details not available.'
-        say '               Git stderr:'
-        do xgce = 1 to gcloneErr.0; say '                 'gcloneErr.xgce; end 
-        end
+            say
+        end  
+        say 
+        say ' ___________________________________________________________________________________________________________'
+        if gitFailed then do        
+            say '     *Warning: Failed to access Git Repo' sGitRepo.xGitRef.url
+            say '               Source file  Commit details not available.'
+            say '               Git stderr:'
+            do xgce = 1 to gcloneErr.0; say '                 'gcloneErr.xgce; end 
+            end
 
-        else do
-        say '     Source file commit is the version used at the time of the build. '
-        say '     It will be equal or later than the DBB build git hash of the branch.' 
-        say '     Git information is currently not supported for shared repos.'
-        end 
-    
-    say 
-    say '     LoadMod SSI is the DBB build Git hash. Use it to trace source version used in the build. '
-    say '     SSI for statically linked modules is not available in the AMBLIST utility.'    
-    
+            else do
+            say '     Source file commit is the version used at the time of the build. '
+            say '     It will be equal or later than the DBB build git hash of the branch.' 
+            say '     Git information is currently not supported for shared repos.'
+            end 
         
+        say 
+        say '     LoadMod SSI is the DBB build Git hash. Use it to trace source version used in the build. '
+        say '     SSI for statically linked modules is not available in the AMBLIST utility.'    
+        
+    end         
 
-exit 
+exit 0
 
 /****     procs  ****/
 parseJson: /* parse the BR json file into a stems or glb vars for the rtp phase  */ 
