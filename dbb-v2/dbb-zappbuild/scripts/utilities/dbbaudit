@@ -47,7 +47,7 @@ if auditType /='full' then do
     x=Directory(packageDir)
     'chtag -tc ISO8859-1 BuildReport.json'
     x=bpxwunix('cat BuildReport.json' ,,buildReport.,cmde.)  /* add the BR to a stem asa stream*/
-    'cat BuildReport.json'
+    /* 'cat BuildReport.json'  */
     end
 
 else do 
