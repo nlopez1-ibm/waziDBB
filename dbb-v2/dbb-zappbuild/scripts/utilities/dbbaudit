@@ -32,15 +32,6 @@ if packagePath = '' then do
     end 
      
 
-if auditType /='full' then do 
-    say 'Listing Build rpt from' packagePath 
-    
-    gc=bpxwunix('dirname'  packagePath,,uo.,ue.)  /* get the base    */
-    packageDir = uo.1 
-    x=Directory(packageDir)
-    'iconv -f UTF-8 -t IBM-1047 BuildReport.json > dbb_BuildRpt '
-    end 
-
 /* mainline */ 
 if exists(packagePath) = "" then do 
     say "dbbaudit:  ERROR"
@@ -48,16 +39,26 @@ if exists(packagePath) = "" then do
     exit 12
     end 
 
-/* Unpack the release package in a tmp folder to examine its contents */
-    if auditType = 'full' then do 
-        workdir='tmp_dbbauditv4';nul='> /dev/null 2>&1'
-        'cd; rm 'workDir nul'; mkdir 'workDir nul'; cd 'workDir'; cp 'packagePath' .; pax -rvf ' packagePath  nul     
+/* in this mode the BR is tagged right just use it s id  */
+if auditType /='full' then do 
+    say 'Listing Build rpt from' packagePath 
+    gc=bpxwunix('dirname'  packagePath,,uo.,ue.)  /* get the base    */
+    packageDir = uo.1 
+    x=Directory(packageDir)
+    'chtag -tc ISO8859-1 BuildReport.json'
+    x=bpxwunix('cat BuildReport.json' ,,buildReport.,cmde.)  /* add the BR to a stem asa stream*/
+    'cat BuildReport.json'
+    end
 
-        x=Directory(workDir) 
-        'iconv -f UTF-8 -t IBM-1047 BuildReport.json > dbb_BuildRpt '
-    end 
+else do 
+    /* Unpack the release package in a tmp folder to examine its contents */
+    workdir='tmp_dbbauditv4';nul='> /dev/null 2>&1'
+    'cd; rm 'workDir nul'; mkdir 'workDir nul'; cd 'workDir'; cp 'packagePath' .; pax -rvf ' packagePath  nul     
 
-/* Read and parse the DBB build report json file */     
+    x=Directory(workDir) 
+    'iconv -f UTF-8 -t IBM-1047 BuildReport.json > dbb_BuildRpt '
+
+    /* Read and parse the DBB build report json file */     
     if exists('BuildReport.json') = "" then do
         say "dbbaudit:  ERROR - unsupported package format >" packagePath
         say '  This package is missing the DBB BuildReport.json'
@@ -66,7 +67,9 @@ if exists(packagePath) = "" then do
         exit 12
         end 
 
-    x=bpxwunix('cat dbb_BuildRpt' ,,buildReport.,cmde.)  /* add the BR to a stem asa stream*/
+        x=bpxwunix('cat dbb_BuildRpt' ,,buildReport.,cmde.)  /* add the BR to a stem asa stream*/
+    end 
+
     call parseJson BuildReport.1                          
     
     /* check if output loads found */
@@ -257,7 +260,6 @@ parseJson: /* parse the BR json file into a stems or glb vars for the rtp phase 
  
     /* pass 1- Add each json blk to the sBlks. stem */
 
-
     do jx = 1 to length(jStr)   
         jChar = substr(jStr,jx,1)
         
@@ -272,6 +274,11 @@ parseJson: /* parse the BR json file into a stems or glb vars for the rtp phase 
             if blkLevel = 0 then do  /* When at this level store the blk  */                
                 blk = substr(jStr,startBlkPos+1,jx-startBlkPos-1)                
                 sBx = sBx + 1;  sBlks.sBx = blk; sBlks.0   = sBx 
+
+                say left(blk,40) 
+
+
+                
             end 
         end 
     end
@@ -325,6 +332,12 @@ parseJson: /* parse the BR json file into a stems or glb vars for the rtp phase 
 
         /* Multi Blks Section - create a stem to hold repeating blks like output loads and depSets */ 
         if pos('"type":"EXECUTE"',blk) > 0 then do  /* output loads */    
+
+
+        say blk 
+
+
+
             do while length(blk) > 1
                 px = pos('"outputs":',blk)
 
