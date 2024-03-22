@@ -123,12 +123,9 @@ main:
             say; say; say  
             say '___________________________________________________________________________________'
             say '** Expanding Lastest BuildReport:  ' bRpt.expandSeq      
-            /*say 'dbb build-result view ' bRpt.expandSeq '--build-group' coll.expandSeq metaType 
+            /*say 'dbb build-result view ' bRpt.expandSeq '--build-group' coll.expandSeq metaType */
 
-            'dbb build-result export '  bRpt.expandSeq  ' --build-group ' coll.expandSeq ' --directory . '  metaType  
-           
-           */ 
-
+           'dbb build-result export '  bRpt.expandSeq  ' --build-group ' coll.expandSeq ' --directory $PWD '  metaType 
            'dbbaudit $PWD/build-results/'coll.expandSeq'/'bRpt.expandSeq'/attachments/BuildReport.json'
          end 
 

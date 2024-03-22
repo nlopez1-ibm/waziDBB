@@ -37,9 +37,7 @@ if auditType /='full' then do
     
     gc=bpxwunix('dirname'  packagePath,,uo.,ue.)  /* get the base    */
     packageDir = uo.1 
-    x=Directory(packageDir) 
-
-      
+    x=Directory(packageDir)
     'iconv -f UTF-8 -t IBM-1047 BuildReport.json > dbb_BuildRpt '
     end 
 
