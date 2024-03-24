@@ -1,4 +1,4 @@
-/* rexx dbbrpt util (nlopez beta 1)
+/* rexx dbbrpt util (nlopez beta 2)
    Summarizes metadata for all collections in a MetaStore.
    Enhancement:
     - allow user to pass an arg (expandSeq) to exapnd a collection and its last BR by the seq assigned in the min rpt   
