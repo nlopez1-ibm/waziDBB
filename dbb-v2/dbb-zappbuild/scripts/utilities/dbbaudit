@@ -1,13 +1,14 @@
 /* rexx   dbbAudit v2.1f (IBM DevOps Acceleration Team )
 
-    Desc:    This lists source files and loads module details in a package.tar  
-    Purpose: An independent audit check of DBB artifacts within a pre-production deployment package. 
+    Desc:    This lists source files and loads module details in a package.tar or DBB json report. 
+    Purpose: An independent audit check of DBB artifacts within a pre-production deployment package.
+             Optionally, includes a cross reference to source files in the git branch at the CI phase.   
  
     pre-req:
-        - SSI enabled in zappbuild fir link phase of all langs 
-        - All shared code is configured in app-conf (and in git  
-        - Provide git access to extract source file commit details. This is optional.        
-        - For source file commit details, assume the the branch used by DBB exists  
+        - SSI enabled in zappbuild for link phase of all langs 
+        - Supports shared repos as configured in app-conf  
+        - Optionally, enable git access to extract git history        
+        - Assumes the branch used by the build & package exists      
         - Compatible with DBB Build Report API 2.0.0
         
         - Supported Package must include a DBB buildReport(BR) as produced by  
@@ -15,8 +16,11 @@
         - buztool packages are not supported yet (DBB BuildReport is not included in tar ) 
 
     required Arg: 
-        packagePath  - Path to a package.tar or 
-                     - Path to buildReport.json
+        packagePath  - Path to a package.tar    (Full Mode - analyze a package and extract the json report)
+                     - Path to buildReport.json (Experimental Mode - analzye a json report skipping load info)
+                     - blank for testmode       (Testing mode) 
+
+    Note:  Cant extract shared file commit history becuase DBB 2's  json output does not provide branch.                   
     */ 
   
 parse arg  packagePath  /*     <- hardcode for testing   */
