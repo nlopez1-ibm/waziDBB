@@ -1,4 +1,4 @@
-/* rexx   dbbAudit v2.1e (IBM DevOps Acceleration Team )
+/* rexx   dbbAudit v2.1f (IBM DevOps Acceleration Team )
 
     Desc:    This lists source files and loads module details in a package.tar  
     Purpose: An independent audit check of DBB artifacts within a pre-production deployment package. 
@@ -25,8 +25,10 @@ if right(packagePath,5) = '.json' then do
     auditType = 'sourceOnly'
     end
 
+/* in test mode - no path passed, grab the last generic package in the tmp folder */
 if packagePath = '' then do  
     packagePath='/u/ibmuser/tmp/dbbaudit-test-package.tar' 
+    packagePath='/tmp/pipelines/Azure-WorkSpace/DBB-Azure-Release_BUILD_2920/poc-workspace/package.tar'
     say 'No Args passed: In TEST mode for hardcoded package: '
     say '    ' packagePath
     end 
@@ -39,7 +41,7 @@ if exists(packagePath) = "" then do
     exit 12
     end 
 
-/* in this mode the BR is tagged right just use it s id  */
+/* in this mode the BR is tagged right just use it as is  */
 if auditType /='full' then do 
     say 'Listing Build rpt from' packagePath 
     gc=bpxwunix('dirname'  packagePath,,uo.,ue.)  /* get the base    */
@@ -51,7 +53,7 @@ if auditType /='full' then do
     end
 
 else do 
-    /* Unpack the release package in a tmp folder to examine its contents */
+    /* Unpack the release package in a tmp folder to examine its contents - callable mode*/
     workdir='tmp_dbbauditv4';nul='> /dev/null 2>&1'
     'cd; rm 'workDir nul'; mkdir 'workDir nul'; cd 'workDir'; cp 'packagePath' .; pax -rvf ' packagePath  nul     
 
@@ -274,9 +276,9 @@ parseJson: /* parse the BR json file into a stems or glb vars for the rtp phase 
             if blkLevel = 0 then do  /* When at this level store the blk  */                
                 blk = substr(jStr,startBlkPos+1,jx-startBlkPos-1)                
                 sBx = sBx + 1;  sBlks.sBx = blk; sBlks.0   = sBx 
-
+                /* debug 
                 say left(blk,40) 
-
+                */
 
                 
             end 
@@ -333,9 +335,9 @@ parseJson: /* parse the BR json file into a stems or glb vars for the rtp phase 
         /* Multi Blks Section - create a stem to hold repeating blks like output loads and depSets */ 
         if pos('"type":"EXECUTE"',blk) > 0 then do  /* output loads */    
 
-
-        say blk 
-
+        /* debug
+            say blk 
+        */
 
 
             do while length(blk) > 1
