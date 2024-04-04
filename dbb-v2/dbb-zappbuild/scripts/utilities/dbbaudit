@@ -20,7 +20,15 @@
                      - Path to buildReport.json (Experimental Mode - analzye a json report skipping load info)
                      - blank for testmode       (Testing mode) 
 
-    Note:  Cant extract shared file commit history becuase DBB 2's  json output does not provide branch.                   
+    Note:  Cant extract shared file commit history becuase DBB 2's  json output does not provide branch.  
+
+    Feedback:
+        4/4/24 - team review feedback.  Make source and load heading lines 
+               - chg git log from commit and date to date and cmt with heading sayung 
+                  last updt / commit id
+               - test identify record in loads 
+               - flag - chg's files - those with a cmiit id = to build id 
+                                
     */ 
   
 parse arg  packagePath  /*     <- hardcode for testing   */
