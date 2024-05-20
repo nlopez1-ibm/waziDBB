@@ -3,6 +3,8 @@
 # Tested on UCD Server ver  7.2.1.2.1127228
 # buztool Ref: https://www.ibm.com/docs/en/devops-deploy/7.2.1?topic=czcv-creating-zos-component-versions-from-zos-unix-system-services
 
+# NOTE: as of May 20 2024 - I cant see JFrog repos outside JES SRVR???
+# Fall back to Code Station in yaml
 . ~/.profile
 
 ucd_version=$1
