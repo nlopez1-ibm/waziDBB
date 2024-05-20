@@ -18,7 +18,7 @@ echo "**  ./Build.sh v2.1 HOST/USER: $(uname -Ia)/$USER  "
 echo "**                          WorkDir:" $PWD
 echo "**                        Workspace:" $WorkSpace
 echo "**                              App:" $App
-echo "**    	           DBB Build Mode:" $BuildMode (Daemon Mode)
+echo "**    	           DBB Build Mode:" $BuildMode "(Daemon Mode)"
 echo "**               DBB zAppBuild Path:" $zAppBuild
 echo "**                         DBB_HOME:" $DBB_HOME
 echo "**               DBB Tookit Version: $(head -n 1 $DBB_HOME/bin/version.properties)"
