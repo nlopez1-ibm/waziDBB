@@ -9,7 +9,7 @@ BuildMode="$4 $5 $6 $7 " #DBB Build modes:  --impactBuild,  --reset, --fullBuild
 
 cd $WorkDir
 
-zAppBuild="$DBB_HOME/dbb-zappbuild/build.groovy  -DBB_DAEMON_HOST 127.0.0.1 -DBB_DAEMON_PORT 8180 "
+zAppBuild="$DBB_HOME/dbb-zappbuild/build.groovy "
 runDBB="groovyz $zAppBuild  --workspace $WorkDir/$WorkSpace --application $App  -outDir $WorkDir/$WorkSpace --hlq $USER.PIPELINE  --logEncoding UTF-8  $BuildMode"
 
 
@@ -18,7 +18,7 @@ echo "**  ./Build.sh v2.1 HOST/USER: $(uname -Ia)/$USER  "
 echo "**                          WorkDir:" $PWD
 echo "**                        Workspace:" $WorkSpace
 echo "**                              App:" $App
-echo "**    	           DBB Build Mode:" $BuildMode "(Daemon Mode)"
+echo "**    	           DBB Build Mode:" $BuildMode 
 echo "**               DBB zAppBuild Path:" $zAppBuild
 echo "**                         DBB_HOME:" $DBB_HOME
 echo "**               DBB Tookit Version: $(head -n 1 $DBB_HOME/bin/version.properties)"
