@@ -9,7 +9,7 @@ BuildMode="$4 $5 $6 $7 " #DBB Build modes:  --impactBuild,  --reset, --fullBuild
 
 cd $WorkDir
 
-zAppBuild=$DBB_HOME/dbb-zappbuild/build.groovy  -DBB_DAEMON_HOST 127.0.0.1 -DBB_DAEMON_PORT 8180 
+zAppBuild="$DBB_HOME/dbb-zappbuild/build.groovy  -DBB_DAEMON_HOST 127.0.0.1 -DBB_DAEMON_PORT 8180 "
 runDBB="groovyz $zAppBuild  --workspace $WorkDir/$WorkSpace --application $App  -outDir $WorkDir/$WorkSpace --hlq $USER.PIPELINE  --logEncoding UTF-8  $BuildMode"
 
 
