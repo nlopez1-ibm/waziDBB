@@ -8,6 +8,8 @@
 # Jfrog repo https://eu.artifactory.swg-devops.com/ui/repos/tree/General/sys-dat-team-generic-local/Azure/poc-workspace
 . ~/.profile
 
+set -x
+
 ucd_version=$1
 ucd_Component_Name=$2
 MyWorkDir=$3
