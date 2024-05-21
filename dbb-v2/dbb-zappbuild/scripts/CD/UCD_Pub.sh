@@ -40,6 +40,7 @@ cli="sh groovyz $pub  --buztool $buzTool --workDir $MyWorkDir  --component $ucd_
 echo "UCD_Pub.sh running groovy cli:"
 echo " " $cli
 #$cli 
+groovyz --version 
 
 groovyz $pub  --buztool $buzTool --workDir $MyWorkDir  --component $ucd_Component_Name --versionName $ucd_version $artProp
 
