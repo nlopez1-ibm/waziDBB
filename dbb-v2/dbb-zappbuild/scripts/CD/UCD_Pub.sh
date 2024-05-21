@@ -8,8 +8,6 @@
 # Jfrog repo https://eu.artifactory.swg-devops.com/ui/repos/tree/General/sys-dat-team-generic-local/Azure/poc-workspace
 . ~/.profile
 
-set -x
-
 ucd_version=$1
 ucd_Component_Name=$2
 MyWorkDir=$3
@@ -27,7 +25,7 @@ else
     #artProp=" -prop $MyWorkDir/artifactoryProps  -ppf $MyWorkDir/artifactoryMapping --ucdV2PackageFormat"
     # fix not sure how I got the above but below is from the Doc 
     
-    artProp=" -prop $MyWorkDir/artifactoryProps  -prop $MyWorkDir/artifactoryMapping -zpv v2"
+    artProp=" -prop $MyWorkDir/artifactoryProps  -ppf $MyWorkDir/artifactoryMapping -prop $MyWorkDir/artifactoryMapping -zpv v2"
 
 fi
 
