@@ -37,7 +37,9 @@ echo "**                            Artifact Store:" $artStore
 cli="sh groovyz $pub  --buztool $buzTool --workDir $MyWorkDir  --component $ucd_Component_Name --versionName $ucd_version $artProp"
 echo "UCD_Pub.sh running groovy cli:"
 echo " " $cli
-$cli 
+#$cli 
+
+groovyz $pub  --buztool $buzTool --workDir $MyWorkDir  --component $ucd_Component_Name --versionName $ucd_version $artProp
 
 # groovyz $pub --buztool $buzTool  --workDir $MyWorkDir --component $ucd_Component_Name --versionName 135_20220531.113630.036   $artProp
 exit $?
