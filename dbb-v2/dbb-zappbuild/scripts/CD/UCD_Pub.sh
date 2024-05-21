@@ -3,8 +3,9 @@
 # Tested on UCD Server ver  7.2.1.2.1127228
 # buztool Ref: https://www.ibm.com/docs/en/devops-deploy/7.2.1?topic=czcv-creating-zos-component-versions-from-zos-unix-system-services
 
-# NOTE: as of May 20 2024 - I cant see JFrog repos outside JES SRVR???
-# Fall back to Code Station in yaml
+# NOTE: MS Edge browser has an issue with jfrog cread- clear cache to see or use chrome 
+# Can fall back to Code Station in yaml - just pass null for arg $4 in the pipe
+# Jfrog repo https://eu.artifactory.swg-devops.com/ui/repos/tree/General/sys-dat-team-generic-local/Azure/poc-workspace
 . ~/.profile
 
 ucd_version=$1
@@ -33,7 +34,7 @@ echo "**                              BuzTool Path:" $buzTool
 echo "**                          Packaging Script:" $pub 
 echo "**                            Artifact Store:" $artStore                   
 
-cli="groovyz $pub  --buztool $buzTool --workDir $MyWorkDir  --component $ucd_Component_Name --versionName $ucd_version $artProp"
+cli="sh groovyz $pub  --buztool $buzTool --workDir $MyWorkDir  --component $ucd_Component_Name --versionName $ucd_version $artProp"
 echo "UCD_Pub.sh running groovy cli:"
 echo " " $cli
 $cli 
