@@ -165,6 +165,8 @@ xml.manifest(type:"MANIFEST_SHIPLIST"){
 
 // njl patch - nov 2022 added dp for create v2
 //println '**PATCH: njl added DeployType at container level for create v2'
+
+
 			//container(name:ds, deployType:output.deployType, type:"PDS"){
 			container(name:ds, type:"PDS"){
 				resource(name:member, type:"PDSMember", deployType:output.deployType){				
@@ -237,9 +239,11 @@ shiplistFile.text = writer
 
 // njl Feb 2024 - add v2 packaging 
 // v2 broken must add a deploy type at the container level- maybe this is old code- fell back
+
+// njl - more mess - the old laucher now fails and the arg seemd all wrog - fix at 2 to comp
 def cmd = [
 	properties.buztoolPath,
-	"createzosversion",
+	"createzosversion2",
 	"-c ",
 	properties.component,
 	"-s",

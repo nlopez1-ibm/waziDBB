@@ -24,8 +24,14 @@ if [ -z "$ArtifactoryMode" ]; then
     artStore="UCD CodeStation"     
 else
     artStore="jFroj_v2Pack" 
-    artProp=" -prop $MyWorkDir/artifactoryProps  -ppf $MyWorkDir/artifactoryMapping --ucdV2PackageFormat"
+    #artProp=" -prop $MyWorkDir/artifactoryProps  -ppf $MyWorkDir/artifactoryMapping --ucdV2PackageFormat"
+    # fix not sure how I got the above but below is from the Doc 
+    
+    artProp=" -prop $MyWorkDir/artifactoryProps  -prop $MyWorkDir/artifactoryMapping -zpv v2"
+
 fi
+
+## DEBUG ??? not sure above --ucdv2 var ... 
 
 echo "**************************************************************"
 echo "**  Started:  UCD_Pub.sh (V3b) Pack&Pub on HOST/USER: $(uname -Ia) $USER"
