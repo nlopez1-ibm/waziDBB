@@ -28,7 +28,7 @@ else
 fi
 
 echo "**************************************************************"
-echo "**  Started:  UCD_Pub.sh (V3a) Pack&Pub on HOST/USER: $(uname -Ia) $USER"
+echo "**  Started:  UCD_Pub.sh (V3b) Pack&Pub on HOST/USER: $(uname -Ia) $USER"
 echo "**                           Version/Build_ID:" $ucd_version
 echo "**                                 Component:" $ucd_Component_Name 
 echo "**                                   workDir:" $MyWorkDir   
