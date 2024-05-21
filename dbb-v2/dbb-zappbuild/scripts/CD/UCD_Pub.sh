@@ -6,6 +6,7 @@
 # NOTE: MS Edge browser has an issue with jfrog cread- clear cache to see or use chrome 
 # Can fall back to Code Station in yaml - just pass null for arg $4 in the pipe
 # Jfrog repo https://eu.artifactory.swg-devops.com/ui/repos/tree/General/sys-dat-team-generic-local/Azure/poc-workspace
+
 . ~/.profile
 
 ucd_version=$1
@@ -22,8 +23,7 @@ if [ -z "$ArtifactoryMode" ]; then
     artStore="UCD CodeStation"     
 else
     artStore="jFroj_v2Pack" 
-    artProp=" -prop $MyWorkDir/artifactoryProps  -ppf $MyWorkDir/artifactoryMapping --ucdV2PackageFormat"
-    
+    artProp=" -prop $MyWorkDir/artifactoryProps  -ppf $MyWorkDir/artifactoryMapping --ucdV2PackageFormat"    
 fi
 
 ## DEBUG ??? not sure above --ucdv2 var ... 
@@ -41,7 +41,6 @@ cli="sh groovyz $pub  --buztool $buzTool --workDir $MyWorkDir  --component $ucd_
 echo "UCD_Pub.sh running groovy cli:"
 echo " " $cli
 #$cli 
-groovyz --version 
 
 groovyz $pub  --buztool $buzTool --workDir $MyWorkDir  --component $ucd_Component_Name --versionName $ucd_version $artProp
 
